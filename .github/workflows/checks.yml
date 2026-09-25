@@ -1,0 +1,46 @@
+name: Checks
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test-lint:
+    runs-on: ubuntu-latest
+
+    env:
+      SECRET_KEY: ci-test-secret-key-not-for-production
+      SMTP_HOST: smtp.example.com
+      SMTP_PORT: "587"
+      SMTP_USER: ci-test-user
+      SMTP_PASSWORD: ci-test-password-not-for-production
+      SMTP_FROM: ci-test@example.com
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Check formatting with Black
+        run: black --check .
+
+      - name: Run Ruff
+        run: ruff check .
+
+      - name: Run tests
+        run: pytest
