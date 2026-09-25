@@ -55,3 +55,17 @@ class TestMonitor:
         monitor = Monitor(self.user_id, self.url, last_checked_at, self.check_interval)
 
         assert monitor.user_id == self.user_id
+
+    def test_monitor_id_defaults_to_none(self):
+        last_checked_at = datetime(2026, 9, 25, 18, 0)
+        monitor = Monitor(self.user_id, self.url, last_checked_at, self.check_interval)
+
+        assert monitor.id is None
+
+    def test_monitor_stores_id(self):
+        last_checked_at = datetime(2026, 9, 25, 18, 0)
+        monitor = Monitor(
+            self.user_id, self.url, last_checked_at, self.check_interval, id=7
+        )
+
+        assert monitor.id == 7

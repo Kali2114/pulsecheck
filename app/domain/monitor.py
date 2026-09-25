@@ -10,7 +10,9 @@ class Monitor:
         check_interval: timedelta,
         timeout: int = 5,
         retry_count: int = 3,
+        id: int | None = None,
     ) -> None:
+        self.id = id
         self.user_id = user_id
         self.url = url
         self.last_checked_at = last_checked_at
