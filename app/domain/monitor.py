@@ -2,7 +2,14 @@ from datetime import datetime, timedelta
 
 
 class Monitor:
-    def __init__(self, url: str, last_checked_at: datetime | None, check_interval: timedelta, timeout: int = 5, retry_count: int = 3) -> None:
+    def __init__(
+        self,
+        url: str,
+        last_checked_at: datetime | None,
+        check_interval: timedelta,
+        timeout: int = 5,
+        retry_count: int = 3,
+    ) -> None:
         self.url = url
         self.last_checked_at = last_checked_at
         self.check_interval = check_interval

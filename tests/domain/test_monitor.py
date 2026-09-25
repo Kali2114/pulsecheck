@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+
 from app.domain.monitor import Monitor
 
 
