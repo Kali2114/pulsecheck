@@ -1,3 +1,6 @@
+import pytest
+
+from app.domain.exceptions import MonitorNotFound
 from app.domain.monitor_repository import InMemoryMonitorRepository
 from tests.domain.utils import create_monitor
 
@@ -18,3 +21,13 @@ class TestMonitorRepository:
         new_monitor = self.repository.add_monitor(create_monitor())
 
         assert new_monitor.id == 2
+
+    def test_get_monitor(self):
+        added_monitor = self.repository.add_monitor(self.monitor)
+        received_monitor = self.repository.get_monitor(added_monitor.id)
+
+        assert added_monitor is received_monitor
+
+    def test_get_monitor_not_found(self):
+        with pytest.raises(MonitorNotFound):
+            self.repository.get_monitor(99)

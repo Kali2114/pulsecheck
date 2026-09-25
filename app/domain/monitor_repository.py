@@ -1,3 +1,4 @@
+from app.domain.exceptions import MonitorNotFound
 from app.domain.monitor import Monitor
 
 
@@ -11,3 +12,9 @@ class InMemoryMonitorRepository:
         self._next_id += 1
         self.monitors[monitor.id] = monitor
         return monitor
+
+    def get_monitor(self, monitor_id: int) -> Monitor:
+        try:
+            return self.monitors[monitor_id]
+        except KeyError:
+            raise MonitorNotFound(f"Monitor with id {monitor_id} not found.") from None
