@@ -18,3 +18,8 @@ class InMemoryMonitorRepository:
             return self.monitors[monitor_id]
         except KeyError:
             raise MonitorNotFound(f"Monitor with id {monitor_id} not found.") from None
+
+    def list_user_monitors(self, user_id: int) -> list[Monitor]:
+        return [
+            monitor for monitor in self.monitors.values() if monitor.user_id == user_id
+        ]
