@@ -45,3 +45,14 @@ class TestMonitorRepository:
         result = self.repository.list_user_monitors(1)
 
         assert result == []
+
+    def test_delete_user_monitor(self):
+        self.repository.add_monitor(self.monitor)
+        self.repository.delete_monitor(self.monitor.id)
+
+        with pytest.raises(MonitorNotFound):
+            self.repository.get_monitor(self.monitor.id)
+
+    def test_delete_user_monitor_not_found(self):
+        with pytest.raises(MonitorNotFound):
+            self.repository.delete_monitor(99)
