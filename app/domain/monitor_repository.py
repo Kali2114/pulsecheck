@@ -30,3 +30,6 @@ class InMemoryMonitorRepository:
     def delete_monitor(self, monitor_id: int) -> None:
         monitor = self._get_or_raise(monitor_id)
         del self.monitors[monitor.id]
+
+    def list_all_monitors(self) -> list[Monitor]:
+        return list(self.monitors.values())
