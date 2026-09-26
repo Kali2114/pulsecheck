@@ -71,3 +71,21 @@ class TestMonitorRepository:
 
         assert len(result) == 5
         assert sorted(x.user_id for x in result) == [1, 1, 1, 2, 3]
+
+    def test_update_user_monitor(self):
+        self.repository.add_monitor(self.monitor)
+        monitor = self.repository.get_monitor(self.monitor.id)
+        payload = {
+            "url": "https://changed.example.com",
+            "timeout": 99,
+            "retry_count": 99,
+        }
+        result = self.repository.update_monitor(monitor.id, payload)
+
+        assert result.url == payload["url"]
+        assert result.timeout == payload["timeout"]
+        assert result.retry_count == payload["retry_count"]
+
+    def test_update_user_monitor_not_found(self):
+        with pytest.raises(MonitorNotFound):
+            self.repository.update_monitor(99, {})

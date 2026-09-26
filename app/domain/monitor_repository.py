@@ -33,3 +33,9 @@ class InMemoryMonitorRepository:
 
     def list_all_monitors(self) -> list[Monitor]:
         return list(self.monitors.values())
+
+    def update_monitor(self, monitor_id: int, payload: dict) -> Monitor:
+        monitor = self._get_or_raise(monitor_id)
+        for key, value in payload.items():
+            setattr(monitor, key, value)
+        return monitor
