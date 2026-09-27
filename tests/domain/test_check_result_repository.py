@@ -65,3 +65,19 @@ class TestCheckResultRepository:
         monitor_results = self.repository.list_for_monitor(self.check_result.monitor_id)
 
         assert monitor_results == [oldest_result, self.check_result, newest_result]
+
+    def test_get_latest_returns_newest_result(self):
+        newest_result = create_check_result(
+            checked_at=self.check_result.checked_at + timedelta(minutes=2)
+        )
+        oldest_result = create_check_result(
+            checked_at=self.check_result.checked_at - timedelta(minutes=2)
+        )
+        self.repository.add_check_result(newest_result)
+        self.repository.add_check_result(oldest_result)
+        latest_result = self.repository.get_latest(self.check_result.monitor_id)
+
+        assert latest_result is newest_result
+
+    def test_get_latest_returns_none_for_monitor_without_results(self):
+        assert self.repository.get_latest(99) is None
