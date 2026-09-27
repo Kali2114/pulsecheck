@@ -8,7 +8,7 @@ def create_monitor(**kwargs) -> Monitor:
     payload = {
         "user_id": 1,
         "url": "http://example.com",
-        "last_checked_at": datetime.now(),
+        "last_checked_at": None,
         "check_interval": timedelta(seconds=5),
     }
     payload.update(kwargs)
