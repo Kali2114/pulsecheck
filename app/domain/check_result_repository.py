@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from app.domain.check_result import CheckResult
 
 
@@ -8,7 +10,14 @@ class InMemoryCheckResultRepository:
     def add_check_result(self, check_result: CheckResult) -> None:
         self.check_results.append(check_result)
 
-    def list_for_monitor(self, monitor_id: int) -> list[CheckResult]:
-        return [
+    def list_for_monitor(
+        self, monitor_id: int, since: datetime | None = None
+    ) -> list[CheckResult]:
+        monitor_results = [
             result for result in self.check_results if result.monitor_id == monitor_id
         ]
+        if since is not None:
+            monitor_results = [
+                result for result in monitor_results if result.checked_at >= since
+            ]
+        return sorted(monitor_results, key=lambda result: result.checked_at)
