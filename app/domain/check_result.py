@@ -3,7 +3,11 @@ from datetime import datetime
 
 class CheckResult:
     def __init__(
-        self, monitor_id: int, checked_at: datetime, is_up: bool, response_time_ms: int
+        self,
+        monitor_id: int,
+        checked_at: datetime,
+        is_up: bool,
+        response_time_ms: int | None,
     ) -> None:
         self.monitor_id = monitor_id
         self.checked_at = checked_at
