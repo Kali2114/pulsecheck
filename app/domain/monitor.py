@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta
 
+from app.domain.exceptions import InvalidRetryCount
+
 
 class Monitor:
     def __init__(
@@ -12,6 +14,8 @@ class Monitor:
         retry_count: int = 3,
         id: int | None = None,
     ) -> None:
+        if retry_count < 1:
+            raise InvalidRetryCount(f"Invalid retry count {retry_count}")
         self.id = id
         self.user_id = user_id
         self.url = url

@@ -1,6 +1,10 @@
 from datetime import datetime, timedelta
 
+import pytest
+
+from app.domain.exceptions import InvalidRetryCount
 from app.domain.monitor import Monitor
+from tests.domain.utils import create_monitor
 
 
 class TestMonitor:
@@ -69,3 +73,12 @@ class TestMonitor:
         )
 
         assert monitor.id == 7
+
+    def test_monitor_rejects_retry_count_below_1(self):
+        with pytest.raises(InvalidRetryCount):
+            create_monitor(retry_count=0)
+
+    def test_monitor_accepts_retry_count_of_1(self):
+        monitor = create_monitor(retry_count=1)
+
+        assert monitor.retry_count == 1

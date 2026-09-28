@@ -26,10 +26,13 @@ class CheckService:
         for monitor in monitors:
             if monitor.id is None:
                 continue
-            ping_result = self.pinger.ping(
-                monitor.url,
-                monitor.timeout,
-            )
+            for _ in range(monitor.retry_count):
+                ping_result = self.pinger.ping(
+                    monitor.url,
+                    monitor.timeout,
+                )
+                if ping_result.is_up():
+                    break
 
             check_result = CheckResult(
                 monitor_id=monitor.id,

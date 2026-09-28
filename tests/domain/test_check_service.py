@@ -8,13 +8,14 @@ from tests.domain.utils import create_monitor
 
 
 class FakePinger:
-    def __init__(self, result: PingResult) -> None:
-        self.result = result
+    def __init__(self, results: list[PingResult]) -> None:
+        self.results = results
         self.calls: list[tuple[str, int]] = []
 
     def ping(self, url: str, timeout: int) -> PingResult:
         self.calls.append((url, timeout))
-        return self.result
+        attempt = min(len(self.calls), len(self.results)) - 1
+        return self.results[attempt]
 
 
 class TestCheckService:
@@ -25,9 +26,13 @@ class TestCheckService:
         self.monitor_repo.add_monitor(self.monitor)
         self.now = datetime(2026, 9, 28, 12, 0)
 
-    def _create_checker(self, ping_result: PingResult) -> CheckService:
-        self.fake_pinger = FakePinger(ping_result)
-        return CheckService(self.monitor_repo, self.check_result_repo, self.fake_pinger)
+    def _create_checker(self, *ping_results: PingResult) -> CheckService:
+        self.fake_pinger = FakePinger(list(ping_results))
+        return CheckService(
+            self.monitor_repo,
+            self.check_result_repo,
+            self.fake_pinger,
+        )
 
     def test_due_monitor_is_checked_and_result_is_stored(self):
         checker = self._create_checker(
@@ -87,3 +92,19 @@ class TestCheckService:
 
         assert self.fake_pinger.calls == []
         assert self.check_result_repo.check_results == []
+
+    def test_retry_succeeds_on_second_attempt(self):
+        self.monitor.retry_count = 2
+        checker = self._create_checker(
+            PingResult(status_code=500, response_time_ms=120),
+            PingResult(status_code=200, response_time_ms=50),
+        )
+
+        checker.check(self.now)
+
+        results = self.check_result_repo.list_for_monitor(self.monitor.id)
+
+        assert len(self.fake_pinger.calls) == 2
+        assert len(results) == 1
+        assert results[0].is_up is True
+        assert results[0].response_time_ms == 50
