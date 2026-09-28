@@ -32,7 +32,7 @@ class CheckService:
             check_result = CheckResult(
                 monitor_id=monitor.id,
                 checked_at=now,
-                is_up=200 <= ping_result.status_code < 400,
+                is_up=ping_result.is_up(),
                 response_time_ms=ping_result.response_time_ms,
             )
 
