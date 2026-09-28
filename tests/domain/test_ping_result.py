@@ -42,3 +42,11 @@ class TestPingResult:
         )
 
         assert ping_result.is_up() is False
+
+    def test_is_up_false_for_5xx(self):
+        ping_result = PingResult(
+            status_code=500,
+            response_time_ms=10,
+        )
+
+        assert ping_result.is_up() is False

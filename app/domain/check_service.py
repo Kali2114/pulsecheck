@@ -24,6 +24,8 @@ class CheckService:
             if monitor.is_due(now)
         ]
         for monitor in monitors:
+            if monitor.id is None:
+                continue
             ping_result = self.pinger.ping(
                 monitor.url,
                 monitor.timeout,
@@ -37,3 +39,4 @@ class CheckService:
             )
 
             self.check_result_repo.add_check_result(check_result)
+            self.monitor_repo.update_monitor(monitor.id, {"last_checked_at": now})

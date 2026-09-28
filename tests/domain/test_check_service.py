@@ -54,3 +54,36 @@ class TestCheckService:
         assert stored_result is not None
         assert stored_result.is_up is False
         assert stored_result.response_time_ms is None
+
+    def test_500_stores_down_result_with_response_time(self):
+        checker = self._create_checker(PingResult(status_code=500, response_time_ms=50))
+
+        checker.check(self.now)
+
+        stored_result = self.check_result_repo.get_latest(self.monitor.id)
+
+        assert stored_result is not None
+        assert stored_result.is_up is False
+        assert stored_result.response_time_ms == 50
+
+    def test_check_updates_monitor_last_checked_at(self):
+        checker = self._create_checker(
+            PingResult(status_code=200, response_time_ms=120)
+        )
+
+        checker.check(self.now)
+
+        updated_monitor = self.monitor_repo.get_monitor(self.monitor.id)
+
+        assert updated_monitor.last_checked_at == self.now
+
+    def test_monitor_without_id_is_skipped(self):
+        checker = self._create_checker(
+            PingResult(status_code=200, response_time_ms=120)
+        )
+        self.monitor.id = None
+
+        checker.check(self.now)
+
+        assert self.fake_pinger.calls == []
+        assert self.check_result_repo.check_results == []
