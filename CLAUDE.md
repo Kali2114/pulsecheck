@@ -27,11 +27,24 @@ schema-drift bug; don't repeat that), APScheduler (in-process, same as fridgewat
 No JS framework for the frontend, matching fridgewatch's choice — but this project needs actual
 WebSocket client JS for live updates, which fridgewatch's frontend never needed.
 
-**Open decision, settle before the infrastructure layer:** SQLite (simple, matches fridgewatch,
-but ephemeral-storage risk on most container platforms and less suited to a growing time-series of
-ping results) vs. Postgres (fits AWS RDS's free tier, better for time-series volume, more relevant
-on a CV). Lean Postgres given the AWS deployment target, but don't assume — decide explicitly when
-you get there.
+**Database: Postgres (decided 2026-09-29).** SQLite would have worked at demo scale (~14k
+ping rows/day for 10 monitors at 1/min is fine for it), so volume wasn't the deciding factor.
+Postgres won on: data living outside the app container (redeploys can't wipe it), the scheduler
+and API writing concurrently, time-series queries in SQL (`date_trunc` for chart buckets,
+`percentile_cont` for p95), and CV relevance. Driver is psycopg 3 (`postgresql+psycopg://`).
+Local dev runs Postgres in Docker (docker-compose); RDS vs. Postgres-in-Docker-on-EC2 is still
+open and belongs to the deployment decision — code is identical either way, only `DATABASE_URL`
+changes.
+
+Persistence design:
+- SQLAlchemy table models live in `app/infrastructure/`, **separate** from the domain classes;
+  repositories map between them. The domain never imports SQLAlchemy.
+- DB repositories expose the same methods as the in-memory ones so `CheckService` works with
+  either. Domain tests keep using the in-memory repos; DB repos get integration tests against a
+  real Postgres test database (per-test transaction rollback). Don't test them against SQLite —
+  it hides Postgres-specific behaviour.
+- `monitors.user_id` gets its FK to `users` in a later migration, when auth lands.
+- Check results grow unbounded — plan a retention/cleanup job eventually.
 
 ## Workflow rules (same as fridgewatch, carried over deliberately)
 
@@ -80,9 +93,28 @@ cost. Fly.io has no free tier as of late 2024; Render's free tier blocks outboun
 has no persistent disk on the free plan — neither is a good fit for this app's notification/DB
 needs even at demo scale, which is part of why AWS was chosen over them this time.
 
-## Current status
+## Current status (2026-09-29)
 
-Nothing built yet. Fresh scaffold only: directory layout, `pyproject.toml`, pre-commit config,
-CI workflow, `requirements.txt`/`requirements-dev.txt`, `.gitignore`. `git init` done, nothing
-committed yet. Domain layer is the true starting point — first thing to write is a test, per the
-workflow rules above.
+**Domain layer for v1 is done** (`app/domain/`, 100% test coverage, all pushed to `main`):
+- `Monitor` — `is_due(now)`; validates `retry_count >= 1`. Note: `retry_count` means *total
+  attempts* (1 = one ping, no retries), despite the name — a rename to `max_attempts` was
+  considered but not done.
+- `CheckResult` — `response_time_ms` is `None` when no response was received (timeout /
+  connection error). A down result *with* a response (e.g. HTTP 500) keeps its time.
+- `InMemoryMonitorRepository`, `InMemoryCheckResultRepository` (`list_for_monitor(monitor_id,
+  since=None)` oldest-first, `get_latest`).
+- `statistics.py` — `uptime_percentage`, `average_response_time` (up checks only; no rounding in
+  the domain — rounding is a display concern).
+- `PingResult` + `Pinger` Protocol (`app/domain/pinger.py`) — `is_up()` is 2xx/3xx; no status
+  code = down.
+- `CheckService.check(now)` — pings due monitors with retries (stops at first up), stores one
+  result per check, updates `last_checked_at` via `update_monitor`.
+
+Known gaps: `update_monitor` uses `setattr` and bypasses `Monitor` validation — must be handled
+when updates arrive via the API. Constructor types in `CheckService` still name the in-memory
+repos; switch to Protocols when the DB repos land.
+
+**Next: persistence layer** — docker-compose Postgres, `DATABASE_URL` via pydantic-settings,
+SQLAlchemy table models, Alembic init + first migration, `SqlAlchemyMonitorRepository` with
+integration tests, then Postgres service container in CI. After that: real httpx `Pinger`,
+APScheduler wiring, then auth + API.
