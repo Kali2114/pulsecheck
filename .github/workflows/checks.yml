@@ -23,6 +23,11 @@ jobs:
       SMTP_USER: ci-test-user
       SMTP_PASSWORD: ci-test-password-not-for-production
       SMTP_FROM: ci-test@example.com
+      POSTGRES_USER: ci-test-user
+      POSTGRES_PASSWORD: ci-test-password-not-for-production
+      POSTGRES_DB: pulsecheck
+      POSTGRES_TEST_DB: pulsecheck_test
+      POSTGRES_PORT: "5432"
 
     steps:
       - name: Checkout repository
