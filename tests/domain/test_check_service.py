@@ -108,3 +108,15 @@ class TestCheckService:
         assert len(results) == 1
         assert results[0].is_up is True
         assert results[0].response_time_ms == 50
+
+    def test_all_attempts_fail_stores_one_down_result(self):
+        self.monitor.retry_count = 4
+        checker = self._create_checker(
+            PingResult(status_code=500, response_time_ms=120),
+        )
+        checker.check(self.now)
+        results = self.check_result_repo.list_for_monitor(self.monitor.id)
+
+        assert len(self.fake_pinger.calls) == 4
+        assert len(results) == 1
+        assert results[0].is_up is False
