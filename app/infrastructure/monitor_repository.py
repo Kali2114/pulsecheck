@@ -59,6 +59,11 @@ class SQLAlchemyMonitorRepository:
         self.session.flush()
         return updated
 
+    def delete_monitor(self, monitor_id: int) -> None:
+        model = self._get_model_or_raise(monitor_id)
+        self.session.delete(model)
+        self.session.flush()
+
     def _get_model_or_raise(self, monitor_id: int) -> MonitorModel:
         model = self.session.get(MonitorModel, monitor_id)
         if model is None:

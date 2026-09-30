@@ -139,3 +139,25 @@ class TestSQLAlchemyMonitorRepository:
         received = self.repository.get_monitor(self.monitor.id)
         assert received.id == self.monitor.id
         assert received.user_id == self.monitor.user_id
+
+    def test_delete_monitor_removes_monitor(self):
+        self.repository.add_monitor(self.monitor)
+
+        self.repository.delete_monitor(self.monitor.id)
+        self.db_session.expire_all()
+
+        with pytest.raises(MonitorNotFound):
+            self.repository.get_monitor(self.monitor.id)
+
+    def test_delete_monitor_keeps_other_monitors(self):
+        self.repository.add_monitor(self.monitor)
+        other_monitor = self.repository.add_monitor(create_monitor())
+
+        self.repository.delete_monitor(self.monitor.id)
+        self.db_session.expire_all()
+
+        assert self.repository.get_monitor(other_monitor.id).id == other_monitor.id
+
+    def test_delete_monitor_raises_for_unknown_id(self):
+        with pytest.raises(MonitorNotFound):
+            self.repository.delete_monitor(99)
