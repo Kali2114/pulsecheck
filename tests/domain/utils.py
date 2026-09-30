@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from app.domain.check_result import CheckResult
 from app.domain.monitor import Monitor
@@ -18,7 +18,7 @@ def create_monitor(**kwargs) -> Monitor:
 def create_check_result(**kwargs) -> CheckResult:
     payload = {
         "monitor_id": 1,
-        "checked_at": datetime(2026, 9, 26, 12, 0),
+        "checked_at": datetime(2026, 9, 26, 12, 0, tzinfo=UTC),
         "is_up": True,
         "response_time_ms": 10,
     }

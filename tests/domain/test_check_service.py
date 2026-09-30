@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from app.domain.check_result_repository import InMemoryCheckResultRepository
 from app.domain.check_service import CheckService
@@ -24,7 +24,7 @@ class TestCheckService:
         self.check_result_repo = InMemoryCheckResultRepository()
         self.monitor = create_monitor(last_checked_at=None)
         self.monitor_repo.add_monitor(self.monitor)
-        self.now = datetime(2026, 9, 28, 12, 0)
+        self.now = datetime(2026, 9, 28, 12, 0, tzinfo=UTC)
 
     def _create_checker(self, *ping_results: PingResult) -> CheckService:
         self.fake_pinger = FakePinger(list(ping_results))

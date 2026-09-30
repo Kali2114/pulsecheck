@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -14,60 +14,60 @@ class TestMonitor:
         self.user_id = 1
 
     def test_monitor_is_due_success(self):
-        last_checked_at = datetime(2026, 9, 25, 18, 0)
-        now = datetime(2026, 9, 25, 18, 5)
+        last_checked_at = datetime(2026, 9, 25, 18, 0, tzinfo=UTC)
+        now = datetime(2026, 9, 25, 18, 5, tzinfo=UTC)
         monitor = Monitor(self.user_id, self.url, last_checked_at, self.check_interval)
 
         assert monitor.is_due(now) is True
 
     def test_monitor_is_due_failure(self):
-        last_checked_at = datetime(2026, 9, 25, 18, 0)
-        now = datetime(2026, 9, 25, 18, 3)
+        last_checked_at = datetime(2026, 9, 25, 18, 0, tzinfo=UTC)
+        now = datetime(2026, 9, 25, 18, 3, tzinfo=UTC)
         monitor = Monitor(self.user_id, self.url, last_checked_at, self.check_interval)
 
         assert monitor.is_due(now) is False
 
     def test_monitor_is_due_last_check_none(self):
         last_checked_at = None
-        now = datetime(2026, 9, 25, 18, 3)
+        now = datetime(2026, 9, 25, 18, 3, tzinfo=UTC)
         monitor = Monitor(self.user_id, self.url, last_checked_at, self.check_interval)
 
         assert monitor.is_due(now) is True
 
     def test_monitor_is_due_well_past_interval(self):
-        last_checked_at = datetime(2026, 9, 25, 18, 0)
-        now = datetime(2026, 9, 25, 18, 25)
+        last_checked_at = datetime(2026, 9, 25, 18, 0, tzinfo=UTC)
+        now = datetime(2026, 9, 25, 18, 25, tzinfo=UTC)
         monitor = Monitor(self.user_id, self.url, last_checked_at, self.check_interval)
 
         assert monitor.is_due(now) is True
 
     def test_monitor_check_defaults(self):
-        last_checked_at = datetime(2026, 9, 25, 18, 0)
+        last_checked_at = datetime(2026, 9, 25, 18, 0, tzinfo=UTC)
         monitor = Monitor(self.user_id, self.url, last_checked_at, self.check_interval)
 
         assert monitor.timeout == 5
         assert monitor.retry_count == 3
 
     def test_monitor_stores_url(self):
-        last_checked_at = datetime(2026, 9, 25, 18, 0)
+        last_checked_at = datetime(2026, 9, 25, 18, 0, tzinfo=UTC)
         monitor = Monitor(self.user_id, self.url, last_checked_at, self.check_interval)
 
         assert monitor.url == self.url
 
     def test_monitor_stores_user_id(self):
-        last_checked_at = datetime(2026, 9, 25, 18, 0)
+        last_checked_at = datetime(2026, 9, 25, 18, 0, tzinfo=UTC)
         monitor = Monitor(self.user_id, self.url, last_checked_at, self.check_interval)
 
         assert monitor.user_id == self.user_id
 
     def test_monitor_id_defaults_to_none(self):
-        last_checked_at = datetime(2026, 9, 25, 18, 0)
+        last_checked_at = datetime(2026, 9, 25, 18, 0, tzinfo=UTC)
         monitor = Monitor(self.user_id, self.url, last_checked_at, self.check_interval)
 
         assert monitor.id is None
 
     def test_monitor_stores_id(self):
-        last_checked_at = datetime(2026, 9, 25, 18, 0)
+        last_checked_at = datetime(2026, 9, 25, 18, 0, tzinfo=UTC)
         monitor = Monitor(
             self.user_id, self.url, last_checked_at, self.check_interval, id=7
         )
