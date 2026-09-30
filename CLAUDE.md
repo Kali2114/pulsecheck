@@ -93,7 +93,7 @@ cost. Fly.io has no free tier as of late 2024; Render's free tier blocks outboun
 has no persistent disk on the free plan — neither is a good fit for this app's notification/DB
 needs even at demo scale, which is part of why AWS was chosen over them this time.
 
-## Current status (2026-09-29)
+## Current status (2026-09-30)
 
 **Domain layer for v1 is done** (`app/domain/`, 100% test coverage, all pushed to `main`):
 - `Monitor` — `is_due(now)`; validates `retry_count >= 1`. Note: `retry_count` means *total
@@ -114,7 +114,15 @@ Known gaps: `update_monitor` uses `setattr` and bypasses `Monitor` validation �
 when updates arrive via the API. Constructor types in `CheckService` still name the in-memory
 repos; switch to Protocols when the DB repos land.
 
-**Next: persistence layer** — docker-compose Postgres, `DATABASE_URL` via pydantic-settings,
-SQLAlchemy table models, Alembic init + first migration, `SqlAlchemyMonitorRepository` with
-integration tests, then Postgres service container in CI. After that: real httpx `Pinger`,
-APScheduler wiring, then auth + API.
+**Persistence layer, in progress:**
+- Done: `docker-compose.yml` (Postgres 17, named volume, healthcheck; init script
+  `docker/postgres/init-test-db.sh` creates the test DB from `POSTGRES_TEST_DB`). Local port is
+  set in `.env` (the user's is 5434). `app/config.py` — `Settings` (pydantic-settings, reads
+  `.env`, `extra="ignore"`), `database_url` / `test_database_url` built with SQLAlchemy
+  `URL.create` so passwords are escaped. **Gotcha:** `str(url)` masks the password as `***` —
+  anywhere a string is needed (Alembic config), use `url.render_as_string(hide_password=False)`.
+  CI sets fake `POSTGRES_*` env vars because `settings = Settings()` runs at import time.
+- Next: SQLAlchemy engine/session in `app/infrastructure/`, monitor table model, `alembic init`
+  + first migration, `SqlAlchemyMonitorRepository` with integration tests against the test DB,
+  then a Postgres service container in CI. After that: real httpx `Pinger`, APScheduler wiring,
+  then auth + API.
