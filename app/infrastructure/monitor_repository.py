@@ -1,3 +1,4 @@
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.domain.exceptions import MonitorNotFound
@@ -28,6 +29,15 @@ class SQLAlchemyMonitorRepository:
         if model is None:
             raise MonitorNotFound(f"Monitor {monitor_id} not found")
         return self._to_domain(model)
+
+    def list_user_monitors(self, user_id: int) -> list[Monitor]:
+        statement = (
+            select(MonitorModel)
+            .where(MonitorModel.user_id == user_id)
+            .order_by(MonitorModel.id)
+        )
+        models = self.session.execute(statement).scalars().all()
+        return [self._to_domain(model) for model in models]
 
     @staticmethod
     def _to_domain(model: MonitorModel) -> Monitor:
