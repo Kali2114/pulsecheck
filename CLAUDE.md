@@ -122,7 +122,14 @@ repos; switch to Protocols when the DB repos land.
   `URL.create` so passwords are escaped. **Gotcha:** `str(url)` masks the password as `***` —
   anywhere a string is needed (Alembic config), use `url.render_as_string(hide_password=False)`.
   CI sets fake `POSTGRES_*` env vars because `settings = Settings()` runs at import time.
-- Next: SQLAlchemy engine/session in `app/infrastructure/`, monitor table model, `alembic init`
-  + first migration, `SqlAlchemyMonitorRepository` with integration tests against the test DB,
-  then a Postgres service container in CI. After that: real httpx `Pinger`, APScheduler wiring,
+- Done: `app/infrastructure/database.py` (`Base`, `engine`, `SessionLocal` with
+  `expire_on_commit=False`), `models.py` (`MonitorModel`, table `monitors`). Alembic set up;
+  first migration creates `monitors`. `alembic/env.py` takes the URL from `settings` — or from
+  `config.attributes["database_url"]` (a `URL`), which is how tests should target the test DB.
+  Never put the URL through `alembic.ini` / `set_main_option`: configparser chokes on the `%`
+  in escaped passwords. Post-write hooks run ruff + black on new migrations.
+- **All datetimes are UTC-aware** (DB columns are `timestamptz`; naive vs aware can't be
+  compared). Tests use `tzinfo=UTC`; the scheduler must pass `datetime.now(UTC)`.
+- Next: `SqlAlchemyMonitorRepository` with integration tests against the test DB (run
+  migrations on it, per-test transaction rollback), then a Postgres service container in CI. After that: real httpx `Pinger`, APScheduler wiring,
   then auth + API.

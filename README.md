@@ -87,6 +87,9 @@ cp .env.sample .env
 
 # PostgreSQL (development and test databases)
 docker compose up -d
+
+# create the tables
+alembic upgrade head
 ```
 
 ## Tests
