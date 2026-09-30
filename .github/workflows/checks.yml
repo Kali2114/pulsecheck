@@ -16,6 +16,24 @@ jobs:
   test-lint:
     runs-on: ubuntu-latest
 
+    # Integration tests (tests/infrastructure) need a real Postgres. The job's `env`
+    # context isn't available to services, so the values below must match
+    # POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_TEST_DB / POSTGRES_PORT in `env`.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: ci-test-user
+          POSTGRES_PASSWORD: ci-test-password-not-for-production
+          POSTGRES_DB: pulsecheck_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci-test-user -d pulsecheck_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     env:
       SECRET_KEY: ci-test-secret-key-not-for-production
       SMTP_HOST: smtp.example.com
