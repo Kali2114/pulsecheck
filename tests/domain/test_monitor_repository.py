@@ -1,7 +1,14 @@
 import pytest
 
-from app.domain.exceptions import MonitorNotFound
-from app.domain.monitor_repository import InMemoryMonitorRepository
+from app.domain.exceptions import (
+    InvalidMonitorUpdate,
+    InvalidRetryCount,
+    MonitorNotFound,
+)
+from app.domain.monitor_repository import (
+    InMemoryMonitorRepository,
+    MonitorRepository,
+)
 from tests.domain.utils import create_monitor
 
 
@@ -89,3 +96,23 @@ class TestMonitorRepository:
     def test_update_user_monitor_not_found(self):
         with pytest.raises(MonitorNotFound):
             self.repository.update_monitor(99, {})
+
+    def test_update_monitor_with_invalid_value_leaves_monitor_unchanged(self):
+        self.repository.add_monitor(self.monitor)
+
+        with pytest.raises(InvalidRetryCount):
+            self.repository.update_monitor(self.monitor.id, {"retry_count": 0})
+
+        received = self.repository.get_monitor(self.monitor.id)
+        assert received.retry_count == self.monitor.retry_count
+
+    def test_update_monitor_rejects_fields_that_are_not_editable(self):
+        self.repository.add_monitor(self.monitor)
+
+        with pytest.raises(InvalidMonitorUpdate):
+            self.repository.update_monitor(self.monitor.id, {"user_id": 2})
+
+        assert self.repository.get_monitor(self.monitor.id).user_id == 1
+
+    def test_in_memory_repository_satisfies_monitor_repository_protocol(self):
+        assert isinstance(self.repository, MonitorRepository)

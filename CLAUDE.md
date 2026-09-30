@@ -110,9 +110,13 @@ needs even at demo scale, which is part of why AWS was chosen over them this tim
 - `CheckService.check(now)` — pings due monitors with retries (stops at first up), stores one
   result per check, updates `last_checked_at` via `update_monitor`.
 
-Known gaps: `update_monitor` uses `setattr` and bypasses `Monitor` validation — must be handled
-when updates arrive via the API. Constructor types in `CheckService` still name the in-memory
-repos; switch to Protocols when the DB repos land.
+Updates go through `Monitor.with_changes(payload)`: only `Monitor.EDITABLE_FIELDS` (id and
+user_id are fixed; unknown keys raise `InvalidMonitorUpdate`), returns a new validated Monitor.
+Both repositories' `update_monitor` use it and validate *before* storing anything.
+Repository interfaces are Protocols in the domain (`MonitorRepository`, `CheckResultRepository`,
+`@runtime_checkable`); `CheckService` depends on those, never on a concrete repository. Each
+implementation has a test asserting `isinstance(repo, Protocol)` — note that only checks method
+*names* exist, not signatures (no mypy in the project yet).
 
 **Persistence layer, in progress:**
 - Done: `docker-compose.yml` (Postgres 17, named volume, healthcheck; init script

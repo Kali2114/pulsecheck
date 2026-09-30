@@ -1,16 +1,17 @@
 from datetime import datetime
 
 from app.domain.check_result import CheckResult
-from app.domain.check_result_repository import InMemoryCheckResultRepository
-from app.domain.monitor_repository import InMemoryMonitorRepository
-from app.domain.pinger import Pinger
+from app.domain.check_result_repository import CheckResultRepository
+from app.domain.monitor import Monitor
+from app.domain.monitor_repository import MonitorRepository
+from app.domain.pinger import Pinger, PingResult
 
 
 class CheckService:
     def __init__(
         self,
-        monitor_repo: InMemoryMonitorRepository,
-        check_result_repo: InMemoryCheckResultRepository,
+        monitor_repo: MonitorRepository,
+        check_result_repo: CheckResultRepository,
         pinger: Pinger,
     ) -> None:
         self.monitor_repo = monitor_repo
@@ -26,13 +27,7 @@ class CheckService:
         for monitor in monitors:
             if monitor.id is None:
                 continue
-            for _ in range(monitor.retry_count):
-                ping_result = self.pinger.ping(
-                    monitor.url,
-                    monitor.timeout,
-                )
-                if ping_result.is_up():
-                    break
+            ping_result = self._ping_with_retries(monitor)
 
             check_result = CheckResult(
                 monitor_id=monitor.id,
@@ -43,3 +38,12 @@ class CheckService:
 
             self.check_result_repo.add_check_result(check_result)
             self.monitor_repo.update_monitor(monitor.id, {"last_checked_at": now})
+
+    def _ping_with_retries(self, monitor: Monitor) -> PingResult:
+        # retry_count is the total number of attempts (>= 1, enforced by Monitor).
+        ping_result = self.pinger.ping(monitor.url, monitor.timeout)
+        for _ in range(monitor.retry_count - 1):
+            if ping_result.is_up():
+                break
+            ping_result = self.pinger.ping(monitor.url, monitor.timeout)
+        return ping_result

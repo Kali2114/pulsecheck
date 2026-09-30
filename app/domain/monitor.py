@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
+from typing import Any
 
-from app.domain.exceptions import InvalidRetryCount
+from app.domain.exceptions import InvalidMonitorUpdate, InvalidRetryCount
 
 
 class Monitor:
@@ -27,6 +28,29 @@ class Monitor:
         self.check_interval = check_interval
         self.timeout = timeout
         self.retry_count = retry_count
+
+    def with_changes(self, changes: dict[str, Any]) -> "Monitor":
+        """Return a new, validated Monitor with `changes` applied.
+
+        Raises InvalidMonitorUpdate for fields outside EDITABLE_FIELDS, and the
+        constructor's own errors (e.g. InvalidRetryCount) for invalid values.
+        The original monitor is never modified.
+        """
+        not_editable = set(changes) - self.EDITABLE_FIELDS
+        if not_editable:
+            raise InvalidMonitorUpdate(
+                f"Fields can't be updated: {', '.join(sorted(not_editable))}"
+            )
+        fields = {
+            "id": self.id,
+            "user_id": self.user_id,
+            "url": self.url,
+            "last_checked_at": self.last_checked_at,
+            "check_interval": self.check_interval,
+            "timeout": self.timeout,
+            "retry_count": self.retry_count,
+        }
+        return Monitor(**(fields | changes))
 
     def is_due(self, now: datetime) -> bool:
         if self.last_checked_at is None:

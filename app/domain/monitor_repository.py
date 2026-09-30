@@ -1,5 +1,29 @@
+from typing import Any, Protocol, runtime_checkable
+
 from app.domain.exceptions import MonitorNotFound
 from app.domain.monitor import Monitor
+
+
+@runtime_checkable
+class MonitorRepository(Protocol):
+    """What the domain needs from monitor storage.
+
+    Any class with these methods counts as a MonitorRepository — no inheritance
+    needed. Implemented by InMemoryMonitorRepository (here, used in tests) and
+    SQLAlchemyMonitorRepository (app/infrastructure, used in production).
+    """
+
+    def add_monitor(self, monitor: Monitor) -> Monitor: ...
+
+    def get_monitor(self, monitor_id: int) -> Monitor: ...
+
+    def list_user_monitors(self, user_id: int) -> list[Monitor]: ...
+
+    def list_all_monitors(self) -> list[Monitor]: ...
+
+    def update_monitor(self, monitor_id: int, payload: dict[str, Any]) -> Monitor: ...
+
+    def delete_monitor(self, monitor_id: int) -> None: ...
 
 
 class InMemoryMonitorRepository:
@@ -28,14 +52,13 @@ class InMemoryMonitorRepository:
         ]
 
     def delete_monitor(self, monitor_id: int) -> None:
-        monitor = self._get_or_raise(monitor_id)
-        del self.monitors[monitor.id]
+        self._get_or_raise(monitor_id)
+        del self.monitors[monitor_id]
 
     def list_all_monitors(self) -> list[Monitor]:
         return list(self.monitors.values())
 
-    def update_monitor(self, monitor_id: int, payload: dict) -> Monitor:
-        monitor = self._get_or_raise(monitor_id)
-        for key, value in payload.items():
-            setattr(monitor, key, value)
-        return monitor
+    def update_monitor(self, monitor_id: int, payload: dict[str, Any]) -> Monitor:
+        updated = self._get_or_raise(monitor_id).with_changes(payload)
+        self.monitors[monitor_id] = updated
+        return updated

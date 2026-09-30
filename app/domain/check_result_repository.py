@@ -1,6 +1,20 @@
 from datetime import datetime
+from typing import Protocol, runtime_checkable
 
 from app.domain.check_result import CheckResult
+
+
+@runtime_checkable
+class CheckResultRepository(Protocol):
+    """What the domain needs from check result storage (see MonitorRepository)."""
+
+    def add_check_result(self, check_result: CheckResult) -> None: ...
+
+    def list_for_monitor(
+        self, monitor_id: int, since: datetime | None = None
+    ) -> list[CheckResult]: ...
+
+    def get_latest(self, monitor_id: int) -> CheckResult | None: ...
 
 
 class InMemoryCheckResultRepository:

@@ -9,7 +9,7 @@ from app.infrastructure.database import Base
 class MonitorModel(Base):
     __tablename__ = "monitors"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
+    id: Mapped[int] = mapped_column(primary_key=True, init=False)
     user_id: Mapped[int] = mapped_column(nullable=False)
     url: Mapped[str] = mapped_column(nullable=False)
     last_checked_at: Mapped[datetime | None] = mapped_column(

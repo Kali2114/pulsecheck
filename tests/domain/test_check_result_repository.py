@@ -1,6 +1,9 @@
 from datetime import timedelta
 
-from app.domain.check_result_repository import InMemoryCheckResultRepository
+from app.domain.check_result_repository import (
+    CheckResultRepository,
+    InMemoryCheckResultRepository,
+)
 from tests.domain.utils import create_check_result
 
 
@@ -81,3 +84,6 @@ class TestCheckResultRepository:
 
     def test_get_latest_returns_none_for_monitor_without_results(self):
         assert self.repository.get_latest(99) is None
+
+    def test_in_memory_repository_satisfies_check_result_repository_protocol(self):
+        assert isinstance(self.repository, CheckResultRepository)

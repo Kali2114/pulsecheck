@@ -8,6 +8,7 @@ from app.domain.exceptions import (
     MonitorNotFound,
 )
 from app.domain.monitor import Monitor
+from app.domain.monitor_repository import MonitorRepository
 from app.infrastructure.monitor_repository import SQLAlchemyMonitorRepository
 from tests.domain.utils import create_monitor
 
@@ -161,3 +162,6 @@ class TestSQLAlchemyMonitorRepository:
     def test_delete_monitor_raises_for_unknown_id(self):
         with pytest.raises(MonitorNotFound):
             self.repository.delete_monitor(99)
+
+    def test_sqlalchemy_repository_satisfies_monitor_repository_protocol(self):
+        assert isinstance(self.repository, MonitorRepository)

@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from app.domain.exceptions import InvalidRetryCount
+from app.domain.exceptions import InvalidMonitorUpdate, InvalidRetryCount
 from app.domain.monitor import Monitor
 from tests.domain.utils import create_monitor
 
@@ -82,3 +82,28 @@ class TestMonitor:
         monitor = create_monitor(retry_count=1)
 
         assert monitor.retry_count == 1
+
+    def test_with_changes_returns_new_monitor_with_changes_applied(self):
+        monitor = create_monitor(id=7)
+
+        changed = monitor.with_changes({"url": "https://changed.example.com"})
+
+        assert changed.url == "https://changed.example.com"
+        assert changed.id == 7
+        assert changed.user_id == monitor.user_id
+
+    def test_with_changes_leaves_original_monitor_unchanged(self):
+        monitor = create_monitor()
+
+        monitor.with_changes({"url": "https://changed.example.com"})
+
+        assert monitor.url == "http://example.com"
+
+    @pytest.mark.parametrize("field", ["id", "user_id", "not_a_field"])
+    def test_with_changes_rejects_fields_that_are_not_editable(self, field):
+        with pytest.raises(InvalidMonitorUpdate):
+            create_monitor().with_changes({field: 2})
+
+    def test_with_changes_validates_new_values(self):
+        with pytest.raises(InvalidRetryCount):
+            create_monitor().with_changes({"retry_count": 0})
