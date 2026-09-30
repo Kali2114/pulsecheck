@@ -4,6 +4,10 @@ from app.domain.exceptions import InvalidRetryCount
 
 
 class Monitor:
+    EDITABLE_FIELDS = frozenset(
+        {"url", "last_checked_at", "check_interval", "timeout", "retry_count"}
+    )
+
     def __init__(
         self,
         user_id: int,

@@ -1,7 +1,9 @@
+from typing import Any
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.domain.exceptions import MonitorNotFound
+from app.domain.exceptions import InvalidMonitorUpdate, MonitorNotFound
 from app.domain.monitor import Monitor
 from app.infrastructure.models import MonitorModel
 
@@ -25,10 +27,7 @@ class SQLAlchemyMonitorRepository:
         return monitor
 
     def get_monitor(self, monitor_id: int) -> Monitor:
-        model = self.session.get(MonitorModel, monitor_id)
-        if model is None:
-            raise MonitorNotFound(f"Monitor {monitor_id} not found")
-        return self._to_domain(model)
+        return self._to_domain(self._get_model_or_raise(monitor_id))
 
     def list_user_monitors(self, user_id: int) -> list[Monitor]:
         statement = (
@@ -44,14 +43,37 @@ class SQLAlchemyMonitorRepository:
         models = self.session.execute(statement).scalars().all()
         return [self._to_domain(model) for model in models]
 
+    def update_monitor(self, monitor_id: int, payload: dict[str, Any]) -> Monitor:
+        model = self._get_model_or_raise(monitor_id)
+
+        not_editable = set(payload) - Monitor.EDITABLE_FIELDS
+        if not_editable:
+            raise InvalidMonitorUpdate(
+                f"Fields can't be updated: {', '.join(sorted(not_editable))}"
+            )
+
+        updated = self._to_domain(model, **payload)
+
+        for key, value in payload.items():
+            setattr(model, key, value)
+        self.session.flush()
+        return updated
+
+    def _get_model_or_raise(self, monitor_id: int) -> MonitorModel:
+        model = self.session.get(MonitorModel, monitor_id)
+        if model is None:
+            raise MonitorNotFound(f"Monitor {monitor_id} not found")
+        return model
+
     @staticmethod
-    def _to_domain(model: MonitorModel) -> Monitor:
-        return Monitor(
-            id=model.id,
-            user_id=model.user_id,
-            url=model.url,
-            last_checked_at=model.last_checked_at,
-            check_interval=model.check_interval,
-            timeout=model.timeout,
-            retry_count=model.retry_count,
-        )
+    def _to_domain(model: MonitorModel, **overrides: Any) -> Monitor:
+        fields = {
+            "id": model.id,
+            "user_id": model.user_id,
+            "url": model.url,
+            "last_checked_at": model.last_checked_at,
+            "check_interval": model.check_interval,
+            "timeout": model.timeout,
+            "retry_count": model.retry_count,
+        }
+        return Monitor(**(fields | overrides))

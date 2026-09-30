@@ -1,8 +1,13 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from app.domain.exceptions import MonitorNotFound
+from app.domain.exceptions import (
+    InvalidMonitorUpdate,
+    InvalidRetryCount,
+    MonitorNotFound,
+)
+from app.domain.monitor import Monitor
 from app.infrastructure.monitor_repository import SQLAlchemyMonitorRepository
 from tests.domain.utils import create_monitor
 
@@ -10,6 +15,7 @@ from tests.domain.utils import create_monitor
 class TestSQLAlchemyMonitorRepository:
     @pytest.fixture(autouse=True)
     def setup(self, db_session):
+        self.db_session = db_session
         self.monitor = create_monitor()
         self.repository = SQLAlchemyMonitorRepository(db_session)
 
@@ -87,3 +93,49 @@ class TestSQLAlchemyMonitorRepository:
         results = self.repository.list_all_monitors()
 
         assert results == []
+
+    def test_update_monitor_persists_changes(self):
+        self.repository.add_monitor(self.monitor)
+        payload = {
+            "url": "https://example.com/updated",
+            "last_checked_at": datetime(2026, 9, 30, 18, 0, tzinfo=UTC),
+            "check_interval": timedelta(minutes=10),
+            "timeout": 15,
+            "retry_count": 5,
+        }
+        updated = self.repository.update_monitor(self.monitor.id, payload)
+        self.db_session.expire_all()
+        received = self.repository.get_monitor(self.monitor.id)
+
+        assert isinstance(updated, Monitor)
+        assert received.url == payload["url"]
+        assert received.last_checked_at == payload["last_checked_at"]
+        assert received.check_interval == payload["check_interval"]
+        assert received.timeout == payload["timeout"]
+        assert received.retry_count == payload["retry_count"]
+
+    def test_update_monitor_raises_for_unknown_id(self):
+        with pytest.raises(MonitorNotFound):
+            self.repository.update_monitor(99, {})
+
+    def test_update_monitor_with_invalid_value_leaves_monitor_unchanged(self):
+        self.repository.add_monitor(self.monitor)
+
+        with pytest.raises(InvalidRetryCount):
+            self.repository.update_monitor(self.monitor.id, {"retry_count": 0})
+
+        self.db_session.expire_all()
+        received = self.repository.get_monitor(self.monitor.id)
+        assert received.retry_count == self.monitor.retry_count
+
+    @pytest.mark.parametrize("field", ["id", "user_id", "not_a_field"])
+    def test_update_monitor_rejects_fields_that_are_not_editable(self, field):
+        self.repository.add_monitor(self.monitor)
+
+        with pytest.raises(InvalidMonitorUpdate):
+            self.repository.update_monitor(self.monitor.id, {field: 2})
+
+        self.db_session.expire_all()
+        received = self.repository.get_monitor(self.monitor.id)
+        assert received.id == self.monitor.id
+        assert received.user_id == self.monitor.user_id
