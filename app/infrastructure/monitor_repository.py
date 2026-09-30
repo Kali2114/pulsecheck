@@ -39,6 +39,11 @@ class SQLAlchemyMonitorRepository:
         models = self.session.execute(statement).scalars().all()
         return [self._to_domain(model) for model in models]
 
+    def list_all_monitors(self) -> list[Monitor]:
+        statement = select(MonitorModel).order_by(MonitorModel.id)
+        models = self.session.execute(statement).scalars().all()
+        return [self._to_domain(model) for model in models]
+
     @staticmethod
     def _to_domain(model: MonitorModel) -> Monitor:
         return Monitor(

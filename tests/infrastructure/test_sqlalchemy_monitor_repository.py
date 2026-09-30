@@ -69,3 +69,21 @@ class TestSQLAlchemyMonitorRepository:
         results = self.repository.list_user_monitors(999)
 
         assert results == []
+
+    def test_list_all_monitors_returns_monitors_of_all_users(self):
+        monitor_1 = self.repository.add_monitor(self.monitor)
+        monitor_2 = self.repository.add_monitor(create_monitor(user_id=2))
+        monitor_3 = self.repository.add_monitor(create_monitor(user_id=3))
+
+        results = self.repository.list_all_monitors()
+
+        assert [monitor.id for monitor in results] == [
+            monitor_1.id,
+            monitor_2.id,
+            monitor_3.id,
+        ]
+
+    def test_list_all_monitors_returns_empty_list_when_no_monitors_exist(self):
+        results = self.repository.list_all_monitors()
+
+        assert results == []
