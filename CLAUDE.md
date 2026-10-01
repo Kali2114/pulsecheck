@@ -93,7 +93,7 @@ cost. Fly.io has no free tier as of late 2024; Render's free tier blocks outboun
 has no persistent disk on the free plan — neither is a good fit for this app's notification/DB
 needs even at demo scale, which is part of why AWS was chosen over them this time.
 
-## Current status (2026-09-30)
+## Current status (2026-10-01)
 
 **Domain layer for v1 is done** (`app/domain/`, 100% test coverage, all pushed to `main`):
 - `Monitor` — `is_due(now)`; validates `retry_count >= 1`. Note: `retry_count` means *total
@@ -134,6 +134,13 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
   in escaped passwords. Post-write hooks run ruff + black on new migrations.
 - **All datetimes are UTC-aware** (DB columns are `timestamptz`; naive vs aware can't be
   compared). Tests use `tzinfo=UTC`; the scheduler must pass `datetime.now(UTC)`.
-- Next: `SqlAlchemyMonitorRepository` with integration tests against the test DB (run
-  migrations on it, per-test transaction rollback), then a Postgres service container in CI. After that: real httpx `Pinger`, APScheduler wiring,
-  then auth + API.
+- Done: `SQLAlchemyMonitorRepository` (all six methods) with integration tests in
+  `tests/infrastructure/` — `conftest.py` migrates the test DB once per session and gives each
+  test a session joined to an outer transaction (`join_transaction_mode="create_savepoint"`)
+  that's rolled back. Tests call `db_session.expire_all()` before re-reading to prove data
+  really hit Postgres (`session.get` otherwise serves the identity-map cache). Listings order by
+  id. CI runs a `postgres:17` service container. Models use `MappedAsDataclass` (typed
+  `__init__`; `id` is `init=False`).
+- Next: `CheckResultModel` + migration (user writes it via `alembic revision --autogenerate`
+  and reads it before applying) and `SQLAlchemyCheckResultRepository`. After that: real httpx
+  `Pinger`, APScheduler wiring, then auth + API.
