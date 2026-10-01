@@ -6,7 +6,6 @@ from app.domain.check_result import CheckResult
 
 @runtime_checkable
 class CheckResultRepository(Protocol):
-    """What the domain needs from check result storage (see MonitorRepository)."""
 
     def add_check_result(self, check_result: CheckResult) -> None: ...
 
