@@ -6,13 +6,6 @@ from app.domain.monitor import Monitor
 
 @runtime_checkable
 class MonitorRepository(Protocol):
-    """What the domain needs from monitor storage.
-
-    Any class with these methods counts as a MonitorRepository — no inheritance
-    needed. Implemented by InMemoryMonitorRepository (here, used in tests) and
-    SQLAlchemyMonitorRepository (app/infrastructure, used in production).
-    """
-
     def add_monitor(self, monitor: Monitor) -> Monitor: ...
 
     def get_monitor(self, monitor_id: int) -> Monitor: ...
