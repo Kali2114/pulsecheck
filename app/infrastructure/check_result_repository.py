@@ -34,6 +34,18 @@ class SQLAlchemyCheckResultRepository:
         models = self.session.execute(statement).scalars().all()
         return [self._to_domain(model) for model in models]
 
+    def get_latest(self, monitor_id: int) -> CheckResult | None:
+        statement = (
+            select(CheckResultModel)
+            .where(CheckResultModel.monitor_id == monitor_id)
+            .order_by(CheckResultModel.checked_at.desc())
+            .limit(1)
+        )
+        model = self.session.scalar(statement)
+        if model is None:
+            return None
+        return self._to_domain(model)
+
     @staticmethod
     def _to_domain(model: CheckResultModel) -> CheckResult:
         return CheckResult(
