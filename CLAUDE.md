@@ -93,7 +93,7 @@ cost. Fly.io has no free tier as of late 2024; Render's free tier blocks outboun
 has no persistent disk on the free plan — neither is a good fit for this app's notification/DB
 needs even at demo scale, which is part of why AWS was chosen over them this time.
 
-## Current status (2026-10-01)
+## Current status (2026-10-02)
 
 **Domain layer for v1 is done** (`app/domain/`, 100% test coverage, all pushed to `main`):
 - `Monitor` — `is_due(now)`; validates `retry_count >= 1`. Note: `retry_count` means *total
@@ -118,7 +118,7 @@ Repository interfaces are Protocols in the domain (`MonitorRepository`, `CheckRe
 implementation has a test asserting `isinstance(repo, Protocol)` — note that only checks method
 *names* exist, not signatures (no mypy in the project yet).
 
-**Persistence layer, in progress:**
+**Persistence layer is done** (all pushed to `main`):
 - Done: `docker-compose.yml` (Postgres 17, named volume, healthcheck; init script
   `docker/postgres/init-test-db.sh` creates the test DB from `POSTGRES_TEST_DB`). Local port is
   set in `.env` (the user's is 5434). `app/config.py` — `Settings` (pydantic-settings, reads
@@ -141,6 +141,12 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
   really hit Postgres (`session.get` otherwise serves the identity-map cache). Listings order by
   id. CI runs a `postgres:17` service container. Models use `MappedAsDataclass` (typed
   `__init__`; `id` is `init=False`).
-- Next: `CheckResultModel` + migration (user writes it via `alembic revision --autogenerate`
-  and reads it before applying) and `SQLAlchemyCheckResultRepository`. After that: real httpx
-  `Pinger`, APScheduler wiring, then auth + API.
+- Done: `CheckResultModel` (table `check_results`, FK to `monitors` with `ON DELETE CASCADE`,
+  index on `(monitor_id, checked_at)`) + migration, and `SQLAlchemyCheckResultRepository`
+  (`add_check_result`, `list_for_monitor`, `get_latest`). Filtering, ordering and `LIMIT 1` all
+  happen in SQL — note SQLAlchemy 2.0's `Result.first()` does **not** add a `LIMIT`, so keep
+  `.limit(1)` in the statement. Ordering tests insert rows in the *opposite* order to the
+  expected output, and filter tests give the other monitor the row that would win without the
+  `WHERE`, so a missing clause actually fails.
+- Next: real httpx `Pinger` in `app/infrastructure/` satisfying the domain `Pinger` Protocol
+  (tests via httpx's mock transport, no network). After that: APScheduler wiring, then auth + API.
