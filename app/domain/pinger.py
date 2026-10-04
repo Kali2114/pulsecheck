@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 
 @dataclass
@@ -13,5 +13,6 @@ class PingResult:
         return 200 <= self.status_code < 400
 
 
+@runtime_checkable
 class Pinger(Protocol):
     def ping(self, url: str, timeout: int) -> PingResult: ...
