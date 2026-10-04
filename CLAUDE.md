@@ -93,7 +93,7 @@ cost. Fly.io has no free tier as of late 2024; Render's free tier blocks outboun
 has no persistent disk on the free plan — neither is a good fit for this app's notification/DB
 needs even at demo scale, which is part of why AWS was chosen over them this time.
 
-## Current status (2026-10-02)
+## Current status (2026-10-04)
 
 **Domain layer for v1 is done** (`app/domain/`, 100% test coverage, all pushed to `main`):
 - `Monitor` — `is_due(now)`; validates `retry_count >= 1`. Note: `retry_count` means *total
@@ -105,8 +105,8 @@ needs even at demo scale, which is part of why AWS was chosen over them this tim
   since=None)` oldest-first, `get_latest`).
 - `statistics.py` — `uptime_percentage`, `average_response_time` (up checks only; no rounding in
   the domain — rounding is a display concern).
-- `PingResult` + `Pinger` Protocol (`app/domain/pinger.py`) — `is_up()` is 2xx/3xx; no status
-  code = down.
+- `PingResult` + `Pinger` Protocol (`app/domain/pinger.py`, `@runtime_checkable`) — `is_up()`
+  is 2xx/3xx; no status code = down.
 - `CheckService.check(now)` — pings due monitors with retries (stops at first up), stores one
   result per check, updates `last_checked_at` via `update_monitor`.
 
@@ -148,5 +148,20 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
   `.limit(1)` in the statement. Ordering tests insert rows in the *opposite* order to the
   expected output, and filter tests give the other monitor the row that would win without the
   `WHERE`, so a missing clause actually fails.
-- Next: real httpx `Pinger` in `app/infrastructure/` satisfying the domain `Pinger` Protocol
-  (tests via httpx's mock transport, no network). After that: APScheduler wiring, then auth + API.
+
+**HTTP pinger is done** (pushed to `main`):
+- `HttpPinger` (`app/infrastructure/http_pinger.py`) takes an injected `httpx.Client`; timeout is
+  per request (each monitor has its own). Follows redirects and reports the final status (time
+  includes all hops). Catches `httpx.RequestError` (timeouts, connection errors, unsupported
+  scheme, too many redirects) **and** `httpx.InvalidURL`, which is *not* a `RequestError` — both
+  give a `PingResult` with no status and no time. The full body is downloaded, so response time
+  includes it (accepted for now). `int()` truncates the ms.
+- Tests (`tests/infrastructure/test_http_pinger.py`) use a `make_pinger(handler)` factory fixture
+  over `httpx.MockTransport` that closes its clients. Gotchas learned: a handler must `raise`
+  httpx exceptions (returning one gives a misleading "async handler" `TypeError`); a mock
+  transport skips the real transport's checks too, so an "invalid URL" test must use a URL httpx
+  rejects while *building* the request (e.g. unclosed IPv6 bracket `http://[::1`) — `://bad-url`
+  parses as a relative URL instead. Each test was mutation-checked (removing the fix turns it red).
+- Next: APScheduler wiring — build the real `CheckService` from the SQLAlchemy repositories and
+  `HttpPinger` and call `check(datetime.now(UTC))` on a schedule. Open questions: who owns and
+  closes the long-lived `httpx.Client`, session/transaction scope per run. Then auth + API.
