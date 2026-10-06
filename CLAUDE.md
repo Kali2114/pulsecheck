@@ -23,7 +23,8 @@ see [[coaching-mode]] and [[tdd-domain-first-workflow]], both still apply here.
 FastAPI, uvicorn, pytest, httpx (TestClient **and** as the runtime HTTP client the checker uses to
 ping monitored URLs — new: fridgewatch never made outbound HTTP calls from its own code), SQLAlchemy
 + Alembic (set up from day one this time — fridgewatch retrofitted Alembic after already hitting a
-schema-drift bug; don't repeat that), APScheduler (in-process, same as fridgewatch's reminder job).
+schema-drift bug; don't repeat that), APScheduler (in-process, started from the FastAPI lifespan —
+so run a single process).
 No JS framework for the frontend, matching fridgewatch's choice — but this project needs actual
 WebSocket client JS for live updates, which fridgewatch's frontend never needed.
 
@@ -181,9 +182,23 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
   raises) — with one monitor nothing is written before the failure, so it proves nothing. The
   meaningful mutation is turning the `rollback()` into a `commit()` (goes red); a stray commit in
   `finally` does not, because the rollback already ran and `close()` discards uncommitted work.
-- Next: APScheduler wiring — one global interval job (every few seconds; `Monitor.is_due` decides
-  which monitors run) calling `run_check` with the real `SessionLocal`, an `HttpPinger` on one
-  long-lived `httpx.Client`, and `datetime.now(UTC)` read inside the job. Set `max_instances=1` /
-  `coalesce` so slow runs don't overlap. Start/stop functions own the lifecycle (shut down the
-  scheduler, *then* close the client); a tiny entry point now, FastAPI lifespan later. Then run it
-  once end-to-end against local Postgres, then auth + API.
+**Scheduler is wired** (pushed to `main`):
+- `create_scheduler(session_factory, pinger, interval_seconds=CHECK_INTERVAL_SECONDS)`
+  (`app/infrastructure/scheduler.py`, default 10s) — one global `BackgroundScheduler` interval
+  job, `max_instances=1`, `coalesce=True` (3.x defaults, set explicitly to document intent); the job
+  reads `datetime.now(UTC)` on every run and calls `run_check`. APScheduler catches and logs job
+  exceptions, so a failed run doesn't stop the scheduler.
+- `scheduler_runner.py`: `start_scheduler()` builds one `httpx.Client` + `HttpPinger` +
+  `SessionLocal` and starts it; `stop_scheduler()` shuts the scheduler down (waits for a running
+  job) *then* closes the client. Called from the FastAPI `lifespan` in `app/main.py` (cleanup in
+  `try/finally`), only when `settings.scheduler_enabled` (env `SCHEDULER_ENABLED`, default true).
+- **In-process means one process only** — with several uvicorn workers every monitor is checked
+  once per worker. Run a single process; a separate worker process is the fix if that ever changes.
+- `tests/conftest.py` sets `SCHEDULER_ENABLED=false` before `app.config` is imported (settings are
+  read at import time), so `TestClient(app)` never starts a real scheduler against the dev DB.
+  `tests/api/test_lifespan.py` checks both branches by monkeypatching `app.main.start_scheduler` /
+  `stop_scheduler`. Scheduler tests check the job's shape and call `job.func()` directly instead of
+  waiting on real time. `scheduler_runner.py` is deliberately untested wiring (~50% coverage).
+- Pytest shows a third-party `StarletteDeprecationWarning` (httpx with `TestClient`) — not ours.
+- Next: run it end-to-end once (`uvicorn app.main:app`, single process; insert a monitor into local
+  Postgres by hand; watch `check_results` fill and `last_checked_at` move). Then auth + API.
