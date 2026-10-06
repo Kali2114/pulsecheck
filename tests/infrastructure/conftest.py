@@ -23,19 +23,23 @@ def engine():
 
 
 @pytest.fixture
-def db_session(engine, migrated_database):
+def session_factory(engine, migrated_database):
     connection = engine.connect()
     transaction = connection.begin()
 
-    SessionLocal = sessionmaker(
+    yield sessionmaker(
         bind=connection,
         join_transaction_mode="create_savepoint",
     )
 
-    session = SessionLocal()
+    transaction.rollback()
+    connection.close()
+
+
+@pytest.fixture
+def db_session(session_factory):
+    session = session_factory()
 
     yield session
 
     session.close()
-    transaction.rollback()
-    connection.close()
