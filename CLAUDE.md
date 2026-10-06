@@ -93,7 +93,7 @@ cost. Fly.io has no free tier as of late 2024; Render's free tier blocks outboun
 has no persistent disk on the free plan — neither is a good fit for this app's notification/DB
 needs even at demo scale, which is part of why AWS was chosen over them this time.
 
-## Current status (2026-10-04)
+## Current status (2026-10-06)
 
 **Domain layer for v1 is done** (`app/domain/`, 100% test coverage, all pushed to `main`):
 - `Monitor` — `is_due(now)`; validates `retry_count >= 1`. Note: `retry_count` means *total
@@ -162,6 +162,28 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
   transport skips the real transport's checks too, so an "invalid URL" test must use a URL httpx
   rejects while *building* the request (e.g. unclosed IPv6 bracket `http://[::1`) — `://bad-url`
   parses as a relative URL instead. Each test was mutation-checked (removing the fix turns it red).
-- Next: APScheduler wiring — build the real `CheckService` from the SQLAlchemy repositories and
-  `HttpPinger` and call `check(datetime.now(UTC))` on a schedule. Open questions: who owns and
-  closes the long-lived `httpx.Client`, session/transaction scope per run. Then auth + API.
+
+**Check runner is done** (pushed to `main`):
+- `run_check(session_factory, pinger, now)` (`app/infrastructure/check_runner.py`) is one checker
+  run as a unit of work: fresh session from the factory → both SQLAlchemy repos on it →
+  `CheckService.check(now)` → commit; on any exception roll back and **re-raise** (the scheduler
+  should see failures); always close. One transaction per run, so one failing ping discards the
+  whole run's results — per-monitor commits are a possible later change.
+- Test fixtures: `session_factory` (in `tests/infrastructure/conftest.py`) yields a
+  `sessionmaker` bound to one connection inside an outer transaction with
+  `join_transaction_mode="create_savepoint"` — code under test can `commit()` (only releases a
+  savepoint), later sessions see the data, and teardown rolls everything back. `db_session` is
+  built on it (one session from the factory).
+- Fakes: shared `tests/helpers/fake_pinger.py::FakePinger(result, failing_urls=...)` (fixed
+  result, raises `RuntimeError` for chosen URLs); the domain test's `SequencePinger` replays a
+  list of results and records calls (for retry tests) — kept separate on purpose.
+- The rollback test needs **two** monitors (good one checked first, by id order, then the bad one
+  raises) — with one monitor nothing is written before the failure, so it proves nothing. The
+  meaningful mutation is turning the `rollback()` into a `commit()` (goes red); a stray commit in
+  `finally` does not, because the rollback already ran and `close()` discards uncommitted work.
+- Next: APScheduler wiring — one global interval job (every few seconds; `Monitor.is_due` decides
+  which monitors run) calling `run_check` with the real `SessionLocal`, an `HttpPinger` on one
+  long-lived `httpx.Client`, and `datetime.now(UTC)` read inside the job. Set `max_instances=1` /
+  `coalesce` so slow runs don't overlap. Start/stop functions own the lifecycle (shut down the
+  scheduler, *then* close the client); a tiny entry point now, FastAPI lifespan later. Then run it
+  once end-to-end against local Postgres, then auth + API.
