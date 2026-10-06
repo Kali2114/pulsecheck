@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     postgres_test_db: str
     postgres_port: int
     postgres_host: str = "localhost"
+    scheduler_enabled: bool = True
 
     model_config = SettingsConfigDict(
         env_file=".env",
