@@ -13,7 +13,6 @@ from tests.helpers.fake_pinger import FakePinger
 class TestCheckRunner:
 
     def test_run_check_commits_result_and_updates_monitor(self, session_factory):
-        SessionLocal = session_factory
         now = datetime(2026, 10, 5, 18, 0, tzinfo=UTC)
         pinger = FakePinger(
             PingResult(
@@ -21,19 +20,21 @@ class TestCheckRunner:
                 response_time_ms=100,
             )
         )
-        with SessionLocal() as session:
+        with session_factory() as session:
             monitor_repository = SQLAlchemyMonitorRepository(session)
 
             monitor = create_monitor()
             monitor_repository.add_monitor(monitor)
 
             session.commit()
+
         run_check(
-            session_factory=SessionLocal,
+            session_factory=session_factory,
             pinger=pinger,
             now=now,
         )
-        with SessionLocal() as session:
+
+        with session_factory() as session:
             monitor_repository = SQLAlchemyMonitorRepository(session)
             check_result_repository = SQLAlchemyCheckResultRepository(session)
 
@@ -47,7 +48,6 @@ class TestCheckRunner:
             assert results[0].is_up
 
     def test_run_check_rolls_back_whole_run_when_a_ping_fails(self, session_factory):
-        SessionLocal = session_factory
         now = datetime(2026, 10, 5, 18, 0, tzinfo=UTC)
         pinger = FakePinger(
             PingResult(
@@ -57,9 +57,11 @@ class TestCheckRunner:
             failing_urls={"http://bad.example.com"},
         )
 
-        with SessionLocal() as session:
+        with session_factory() as session:
             monitor_repository = SQLAlchemyMonitorRepository(session)
 
+            # Monitors are checked in id order, so the good one is written before
+            # the bad one raises; that leaves something for the rollback to undo.
             good_monitor = create_monitor(url="http://good.example.com")
             bad_monitor = create_monitor(url="http://bad.example.com")
             monitor_repository.add_monitor(good_monitor)
@@ -68,12 +70,12 @@ class TestCheckRunner:
 
         with pytest.raises(RuntimeError):
             run_check(
-                session_factory=SessionLocal,
+                session_factory=session_factory,
                 pinger=pinger,
                 now=now,
             )
 
-        with SessionLocal() as session:
+        with session_factory() as session:
             monitor_repository = SQLAlchemyMonitorRepository(session)
             check_result_repository = SQLAlchemyCheckResultRepository(session)
 

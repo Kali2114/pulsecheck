@@ -7,7 +7,7 @@ from app.domain.pinger import PingResult
 from tests.domain.utils import create_monitor
 
 
-class FakePinger:
+class SequencePinger:
     def __init__(self, results: list[PingResult]) -> None:
         self.results = results
         self.calls: list[tuple[str, int]] = []
@@ -27,7 +27,7 @@ class TestCheckService:
         self.now = datetime(2026, 9, 28, 12, 0, tzinfo=UTC)
 
     def _create_checker(self, *ping_results: PingResult) -> CheckService:
-        self.fake_pinger = FakePinger(list(ping_results))
+        self.fake_pinger = SequencePinger(list(ping_results))
         return CheckService(
             self.monitor_repo,
             self.check_result_repo,
