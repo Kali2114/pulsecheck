@@ -94,12 +94,13 @@ cost. Fly.io has no free tier as of late 2024; Render's free tier blocks outboun
 has no persistent disk on the free plan — neither is a good fit for this app's notification/DB
 needs even at demo scale, which is part of why AWS was chosen over them this time.
 
-## Current status (2026-10-06)
+## Current status (2026-10-07)
 
 **Domain layer for v1 is done** (`app/domain/`, 100% test coverage, all pushed to `main`):
-- `Monitor` — `is_due(now)`; validates `retry_count >= 1`. Note: `retry_count` means *total
-  attempts* (1 = one ping, no retries), despite the name — a rename to `max_attempts` was
-  considered but not done.
+- `Monitor` — `is_due(now)`: due from `last_checked_at + check_interval - DUE_TOLERANCE`
+  (1s, inclusive) — see the scheduler section for why; validates `retry_count >= 1`. Note:
+  `retry_count` means *total attempts* (1 = one ping, no retries), despite the name — a rename to
+  `max_attempts` was considered but not done.
 - `CheckResult` — `response_time_ms` is `None` when no response was received (timeout /
   connection error). A down result *with* a response (e.g. HTTP 500) keeps its time.
 - `InMemoryMonitorRepository`, `InMemoryCheckResultRepository` (`list_for_monitor(monitor_id,
@@ -198,7 +199,17 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
   read at import time), so `TestClient(app)` never starts a real scheduler against the dev DB.
   `tests/api/test_lifespan.py` checks both branches by monkeypatching `app.main.start_scheduler` /
   `stop_scheduler`. Scheduler tests check the job's shape and call `job.func()` directly instead of
-  waiting on real time. `scheduler_runner.py` is deliberately untested wiring (~50% coverage).
+  waiting on real time. `scheduler_runner.py` tests wrap the real `create_scheduler` with a
+  one-hour interval so a started scheduler never runs a job against the dev DB.
 - Pytest shows a third-party `StarletteDeprecationWarning` (httpx with `TestClient`) — not ours.
-- Next: run it end-to-end once (`uvicorn app.main:app`, single process; insert a monitor into local
-  Postgres by hand; watch `check_results` fill and `last_checked_at` move). Then auth + API.
+- **End-to-end run works** (2026-10-07): `uvicorn app.main:app` + a monitor inserted by hand →
+  real pings land in `check_results`. It exposed a boundary bug: with a 10s monitor on a 10s tick,
+  ticks drifting ~0.2ms early made `is_due` say no, so checks ran every 20s. Fixed with
+  `Monitor.DUE_TOLERANCE`; tests pin it from both sides and at the inclusive edge. Lesson: after a
+  code change, restart uvicorn before judging a run — old code kept producing 20s gaps at first.
+  Handy check: `SELECT id, checked_at, checked_at - lag(checked_at) OVER (ORDER BY checked_at)
+  AS gap FROM check_results ORDER BY id;`
+- **The checker part of v1 is done.** Next: auth (register/login, hashed passwords, JWT — same
+  pattern as fridgewatch), then monitor CRUD API scoped per user (adds the `monitors.user_id` FK
+  migration), then the dashboard. API tests must not start the scheduler — `tests/conftest.py`
+  already handles that.
