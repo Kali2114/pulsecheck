@@ -20,6 +20,36 @@ class TestMonitor:
 
         assert monitor.is_due(now) is True
 
+    def _make_monitor(self, last_checked_at: datetime | None) -> Monitor:
+        return Monitor(self.user_id, self.url, last_checked_at, self.check_interval)
+
+    def _due_from(self, last_checked_at: datetime) -> datetime:
+        return last_checked_at + self.check_interval - Monitor.DUE_TOLERANCE
+
+    def test_monitor_is_due_within_tolerance(self):
+        last_checked_at = datetime(2026, 9, 25, 18, 0, tzinfo=UTC)
+        now = self._due_from(last_checked_at) + timedelta(milliseconds=1)
+
+        monitor = self._make_monitor(last_checked_at)
+
+        assert monitor.is_due(now) is True
+
+    def test_monitor_is_due_at_tolerance_boundary(self):
+        last_checked_at = datetime(2026, 9, 25, 18, 0, tzinfo=UTC)
+        now = self._due_from(last_checked_at)
+
+        monitor = self._make_monitor(last_checked_at)
+
+        assert monitor.is_due(now) is True
+
+    def test_monitor_is_not_due_outside_tolerance(self):
+        last_checked_at = datetime(2026, 9, 25, 18, 0, tzinfo=UTC)
+        now = self._due_from(last_checked_at) - timedelta(milliseconds=1)
+
+        monitor = self._make_monitor(last_checked_at)
+
+        assert monitor.is_due(now) is False
+
     def test_monitor_is_due_failure(self):
         last_checked_at = datetime(2026, 9, 25, 18, 0, tzinfo=UTC)
         now = datetime(2026, 9, 25, 18, 3, tzinfo=UTC)

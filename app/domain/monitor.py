@@ -5,6 +5,7 @@ from app.domain.exceptions import InvalidMonitorUpdate, InvalidRetryCount
 
 
 class Monitor:
+    DUE_TOLERANCE = timedelta(seconds=1)
     EDITABLE_FIELDS = frozenset(
         {"url", "last_checked_at", "check_interval", "timeout", "retry_count"}
     )
@@ -55,6 +56,6 @@ class Monitor:
     def is_due(self, now: datetime) -> bool:
         if self.last_checked_at is None:
             return True
-        if self.last_checked_at + self.check_interval <= now:
-            return True
-        return False
+        due_from = self.last_checked_at + self.check_interval - self.DUE_TOLERANCE
+
+        return due_from <= now
