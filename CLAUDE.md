@@ -94,7 +94,7 @@ cost. Fly.io has no free tier as of late 2024; Render's free tier blocks outboun
 has no persistent disk on the free plan — neither is a good fit for this app's notification/DB
 needs even at demo scale, which is part of why AWS was chosen over them this time.
 
-## Current status (2026-10-07)
+## Current status (2026-10-08)
 
 **Domain layer for v1 is done** (`app/domain/`, 100% test coverage, all pushed to `main`):
 - `Monitor` — `is_due(now)`: due from `last_checked_at + check_interval - DUE_TOLERANCE`
@@ -209,7 +209,32 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
   code change, restart uvicorn before judging a run — old code kept producing 20s gaps at first.
   Handy check: `SELECT id, checked_at, checked_at - lag(checked_at) OVER (ORDER BY checked_at)
   AS gap FROM check_results ORDER BY id;`
-- **The checker part of v1 is done.** Next: auth (register/login, hashed passwords, JWT — same
-  pattern as fridgewatch), then monitor CRUD API scoped per user (adds the `monitors.user_id` FK
-  migration), then the dashboard. API tests must not start the scheduler — `tests/conftest.py`
-  already handles that.
+- **The checker part of v1 is done.**
+
+**Auth, in progress — registration done** (domain only, pushed to `main`):
+- `User(email, hashed_password, id=None)` (`app/domain/user.py`) — deliberately minimal: no
+  name / is_active until something uses them. The field is `hashed_password` everywhere (User,
+  `create_user`, the hasher's `verify(password, hashed_password)`).
+- `UserRepository` Protocol + `InMemoryUserRepository` (`app/domain/user_repository.py`):
+  `add_user` (assigns ids like `add_monitor`), `get_by_email` → `User | None`. Returning `None`
+  is on purpose: "no such email" is the happy path for register and an expected case for login,
+  unlike `get_monitor(id)` where a missing id is an error. `get_by_email` matches exactly — the
+  service must normalise first.
+- `PasswordHasher` Protocol (`app/domain/password_hasher.py`: `hash`, `verify`); tests use
+  `tests/domain/fakes.py::FakePasswordHasher` (`"hashed:" + password`).
+- `AuthService(user_repository, password_hasher)` (`app/domain/auth_service.py`) — `register`
+  normalises via module-level `normalize_email` (strip + lowercase) for both lookup and storage,
+  raises `EmailAlreadyRegistered` for a taken email in any case, stores only the hash.
+- Exceptions added: `EmailAlreadyRegistered`, `InvalidCredentials` (for login), `UserNotFound`
+  (currently unused — keep for a future `get_user(user_id)` or remove).
+- Next: `login(email, password)` — red tests first: right password → user; normalised email logs
+  in; wrong password **and** unknown email both raise the same `InvalidCredentials` (no account
+  enumeration). Maybe a min password length rule. Then infrastructure: `UserModel` + migration
+  with a **unique** email constraint (map `IntegrityError` → `EmailAlreadyRegistered`, the service
+  check alone races), the `monitors.user_id` FK migration (local DB has a hand-made monitor with
+  `user_id=1` — create that user or delete it first), a real hasher (`bcrypt` directly or
+  `pwdlib`/argon2 — not `passlib`, unmaintained and broken with newer bcrypt), PyJWT tokens (user
+  id + expiry, `SECRET_KEY` from settings, injected clock). Then the API: register (201/409),
+  login via `OAuth2PasswordRequestForm` (so `/docs` Authorize works; 401), `get_current_user`, a
+  per-request DB-session dependency overridden in tests with `session_factory`. Then monitor CRUD
+  API, then the dashboard.
