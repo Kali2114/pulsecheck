@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 from app.domain.check_result import CheckResult
 from app.domain.monitor import Monitor
+from app.domain.user import User
 
 
 def create_monitor(**kwargs) -> Monitor:
@@ -24,3 +25,13 @@ def create_check_result(**kwargs) -> CheckResult:
     }
     payload.update(kwargs)
     return CheckResult(**payload)
+
+
+def create_user(**kwargs) -> User:
+    payload = {
+        "email": "user@example.com",
+        "hashed_password": "hashed:secret123",
+        "id": None,
+    }
+    payload.update(kwargs)
+    return User(**payload)
