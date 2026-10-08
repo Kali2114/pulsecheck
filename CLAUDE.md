@@ -211,7 +211,7 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
   AS gap FROM check_results ORDER BY id;`
 - **The checker part of v1 is done.**
 
-**Auth, in progress — registration done** (domain only, pushed to `main`):
+**Auth, in progress — domain done (register + login)** (pushed to `main`):
 - `User(email, hashed_password, id=None)` (`app/domain/user.py`) — deliberately minimal: no
   name / is_active until something uses them. The field is `hashed_password` everywhere (User,
   `create_user`, the hasher's `verify(password, hashed_password)`).
@@ -221,20 +221,26 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
   unlike `get_monitor(id)` where a missing id is an error. `get_by_email` matches exactly — the
   service must normalise first.
 - `PasswordHasher` Protocol (`app/domain/password_hasher.py`: `hash`, `verify`); tests use
-  `tests/domain/fakes.py::FakePasswordHasher` (`"hashed:" + password`).
+  `tests/domain/fakes.py::FakePasswordHasher` (`"hashed:" + password`; records `verify_calls`).
 - `AuthService(user_repository, password_hasher)` (`app/domain/auth_service.py`) — `register`
   normalises via module-level `normalize_email` (strip + lowercase) for both lookup and storage,
   raises `EmailAlreadyRegistered` for a taken email in any case, stores only the hash.
+- `login(email, password)` normalises the same way and raises **one** `InvalidCredentials` for
+  both unknown email and wrong password (no account enumeration). Timing too: `verify` always runs
+  exactly once — against a dummy hash (`DUMMY_PASSWORD`, hashed once in `__init__`) when the user
+  doesn't exist — so with a real, deliberately slow hasher an unknown email isn't answered faster.
+  The `user is None` check still guards, so the dummy password never logs anyone in (a test pins
+  it; dropping the check turns it red). Cost: constructing `AuthService` calls `hash` once (~100ms
+  with bcrypt/argon2) — build it once at startup rather than per request.
 - Exceptions added: `EmailAlreadyRegistered`, `InvalidCredentials` (for login), `UserNotFound`
   (currently unused — keep for a future `get_user(user_id)` or remove).
-- Next: `login(email, password)` — red tests first: right password → user; normalised email logs
-  in; wrong password **and** unknown email both raise the same `InvalidCredentials` (no account
-  enumeration). Maybe a min password length rule. Then infrastructure: `UserModel` + migration
-  with a **unique** email constraint (map `IntegrityError` → `EmailAlreadyRegistered`, the service
-  check alone races), the `monitors.user_id` FK migration (local DB has a hand-made monitor with
-  `user_id=1` — create that user or delete it first), a real hasher (`bcrypt` directly or
-  `pwdlib`/argon2 — not `passlib`, unmaintained and broken with newer bcrypt), PyJWT tokens (user
-  id + expiry, `SECRET_KEY` from settings, injected clock). Then the API: register (201/409),
-  login via `OAuth2PasswordRequestForm` (so `/docs` Authorize works; 401), `get_current_user`, a
-  per-request DB-session dependency overridden in tests with `session_factory`. Then monitor CRUD
-  API, then the dashboard.
+- Not done: a minimum password length rule (decide before the API).
+- Next: infrastructure — `UserModel` + migration with a **unique** email constraint (map
+  `IntegrityError` → `EmailAlreadyRegistered`; the service check alone races) and
+  `SQLAlchemyUserRepository` with integration tests; the `monitors.user_id` FK migration (local DB
+  has a hand-made monitor with `user_id=1` — create that user or delete it first); a real hasher
+  (`bcrypt` directly or `pwdlib`/argon2 — not `passlib`, unmaintained and broken with newer
+  bcrypt); PyJWT tokens (user id + expiry, `SECRET_KEY` from settings, injected clock). Then the
+  API: register (201/409), login via `OAuth2PasswordRequestForm` (so `/docs` Authorize works;
+  401), `get_current_user`, a per-request DB-session dependency overridden in tests with
+  `session_factory`. Then monitor CRUD API, then the dashboard.
