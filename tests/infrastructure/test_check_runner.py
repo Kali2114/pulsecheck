@@ -12,7 +12,9 @@ from tests.helpers.fake_pinger import FakePinger
 
 class TestCheckRunner:
 
-    def test_run_check_commits_result_and_updates_monitor(self, session_factory):
+    def test_run_check_commits_result_and_updates_monitor(
+        self, session_factory, make_user
+    ):
         now = datetime(2026, 10, 5, 18, 0, tzinfo=UTC)
         pinger = FakePinger(
             PingResult(
@@ -23,7 +25,7 @@ class TestCheckRunner:
         with session_factory() as session:
             monitor_repository = SQLAlchemyMonitorRepository(session)
 
-            monitor = create_monitor()
+            monitor = create_monitor(user_id=make_user())
             monitor_repository.add_monitor(monitor)
 
             session.commit()
@@ -47,7 +49,9 @@ class TestCheckRunner:
             assert results[0].checked_at == now
             assert results[0].is_up
 
-    def test_run_check_rolls_back_whole_run_when_a_ping_fails(self, session_factory):
+    def test_run_check_rolls_back_whole_run_when_a_ping_fails(
+        self, session_factory, make_user
+    ):
         now = datetime(2026, 10, 5, 18, 0, tzinfo=UTC)
         pinger = FakePinger(
             PingResult(
@@ -62,8 +66,11 @@ class TestCheckRunner:
 
             # Monitors are checked in id order, so the good one is written before
             # the bad one raises; that leaves something for the rollback to undo.
-            good_monitor = create_monitor(url="http://good.example.com")
-            bad_monitor = create_monitor(url="http://bad.example.com")
+            user_id = make_user()
+            good_monitor = create_monitor(
+                user_id=user_id, url="http://good.example.com"
+            )
+            bad_monitor = create_monitor(user_id=user_id, url="http://bad.example.com")
             monitor_repository.add_monitor(good_monitor)
             monitor_repository.add_monitor(bad_monitor)
             session.commit()

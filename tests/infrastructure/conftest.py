@@ -5,6 +5,8 @@ from sqlalchemy.orm import sessionmaker
 
 from alembic import command
 from app.config import settings
+from app.infrastructure.user_repository import SQLAlchemyUserRepository
+from tests.domain.utils import create_user
 
 
 @pytest.fixture(scope="session")
@@ -43,3 +45,20 @@ def db_session(session_factory):
     yield session
 
     session.close()
+
+
+@pytest.fixture
+def make_user(session_factory):
+    created = 0
+
+    def _make_user() -> int:
+        nonlocal created
+        created += 1
+        with session_factory() as session:
+            user = SQLAlchemyUserRepository(session).add_user(
+                create_user(email=f"user{created}@example.com")
+            )
+            session.commit()
+        return user.id
+
+    return _make_user

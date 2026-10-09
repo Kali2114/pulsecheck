@@ -11,11 +11,12 @@ from tests.domain.utils import create_check_result, create_monitor
 
 class TestSQLAlchemyCheckResultRepository:
     @pytest.fixture(autouse=True)
-    def setup(self, db_session):
+    def setup(self, db_session, make_user):
         self.db_session = db_session
+        self.make_user = make_user
         self.monitor_repository = SQLAlchemyMonitorRepository(db_session)
         self.check_result_repository = SQLAlchemyCheckResultRepository(db_session)
-        self.monitor = create_monitor()
+        self.monitor = create_monitor(user_id=make_user())
         self.monitor_repository.add_monitor(self.monitor)
         self.now = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
 
@@ -51,7 +52,7 @@ class TestSQLAlchemyCheckResultRepository:
         assert [result.checked_at for result in results] == [newer_result.checked_at]
 
     def test_list_for_monitor_filters_by_monitor_id(self):
-        other_monitor = create_monitor(user_id=2)
+        other_monitor = create_monitor(user_id=self.make_user())
         self.monitor_repository.add_monitor(other_monitor)
 
         result_1 = create_check_result(
@@ -111,7 +112,7 @@ class TestSQLAlchemyCheckResultRepository:
     def test_get_latest_returns_result_only_for_given_monitor(self):
         newer_time = self.now + timedelta(hours=1)
         self._add_result(self.now)
-        other_monitor = create_monitor(user_id=2)
+        other_monitor = create_monitor(user_id=self.make_user())
         self.monitor_repository.add_monitor(other_monitor)
         other_check_result = create_check_result(
             monitor_id=other_monitor.id,

@@ -10,7 +10,10 @@ class MonitorModel(Base):
     __tablename__ = "monitors"
 
     id: Mapped[int] = mapped_column(primary_key=True, init=False)
-    user_id: Mapped[int] = mapped_column(nullable=False)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", name="monitors_user_id_fkey"),
+        nullable=False,
+    )
     url: Mapped[str] = mapped_column(nullable=False)
     last_checked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),

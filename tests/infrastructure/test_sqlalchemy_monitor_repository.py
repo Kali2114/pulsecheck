@@ -15,9 +15,11 @@ from tests.domain.utils import create_monitor
 
 class TestSQLAlchemyMonitorRepository:
     @pytest.fixture(autouse=True)
-    def setup(self, db_session):
+    def setup(self, db_session, make_user):
         self.db_session = db_session
-        self.monitor = create_monitor()
+        self.make_user = make_user
+        self.user_id = make_user()
+        self.monitor = create_monitor(user_id=self.user_id)
         self.repository = SQLAlchemyMonitorRepository(db_session)
 
     def test_add_monitor_assigns_id(self):
@@ -45,7 +47,8 @@ class TestSQLAlchemyMonitorRepository:
 
     def test_get_monitor_preserves_utc_last_checked_at(self):
         monitor = create_monitor(
-            last_checked_at=datetime(2026, 9, 30, 12, 0, tzinfo=UTC)
+            user_id=self.user_id,
+            last_checked_at=datetime(2026, 9, 30, 12, 0, tzinfo=UTC),
         )
         self.repository.add_monitor(monitor)
 
@@ -55,9 +58,9 @@ class TestSQLAlchemyMonitorRepository:
 
     def test_list_user_monitors_returns_only_given_users_monitors(self):
         monitor_1 = self.monitor
-        monitor_2 = create_monitor()
-        monitor_3 = create_monitor()
-        other_user_monitor = create_monitor(user_id=2)
+        monitor_2 = create_monitor(user_id=self.user_id)
+        monitor_3 = create_monitor(user_id=self.user_id)
+        other_user_monitor = create_monitor(user_id=self.make_user())
 
         self.repository.add_monitor(monitor_1)
         self.repository.add_monitor(monitor_2)
@@ -79,8 +82,12 @@ class TestSQLAlchemyMonitorRepository:
 
     def test_list_all_monitors_returns_monitors_of_all_users(self):
         monitor_1 = self.repository.add_monitor(self.monitor)
-        monitor_2 = self.repository.add_monitor(create_monitor(user_id=2))
-        monitor_3 = self.repository.add_monitor(create_monitor(user_id=3))
+        monitor_2 = self.repository.add_monitor(
+            create_monitor(user_id=self.make_user())
+        )
+        monitor_3 = self.repository.add_monitor(
+            create_monitor(user_id=self.make_user())
+        )
 
         results = self.repository.list_all_monitors()
 
@@ -152,7 +159,9 @@ class TestSQLAlchemyMonitorRepository:
 
     def test_delete_monitor_keeps_other_monitors(self):
         self.repository.add_monitor(self.monitor)
-        other_monitor = self.repository.add_monitor(create_monitor())
+        other_monitor = self.repository.add_monitor(
+            create_monitor(user_id=self.user_id)
+        )
 
         self.repository.delete_monitor(self.monitor.id)
         self.db_session.expire_all()

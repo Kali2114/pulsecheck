@@ -30,9 +30,9 @@ class TestCreateScheduler:
         assert job.max_instances == 1
         assert job.coalesce is True
 
-    def test_job_runs_a_check_for_due_monitors(self, session_factory):
+    def test_job_runs_a_check_for_due_monitors(self, session_factory, make_user):
         with session_factory() as session:
-            monitor = create_monitor()
+            monitor = create_monitor(user_id=make_user())
             SQLAlchemyMonitorRepository(session).add_monitor(monitor)
             session.commit()
 
