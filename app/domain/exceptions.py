@@ -20,3 +20,7 @@ class UserNotFound(Exception):
 
 class InvalidCredentials(Exception):
     """Raised when credentials are invalid"""
+
+
+class PasswordTooLong(Exception):
+    """Raised when a password is too long"""
