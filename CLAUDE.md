@@ -94,7 +94,7 @@ cost. Fly.io has no free tier as of late 2024; Render's free tier blocks outboun
 has no persistent disk on the free plan — neither is a good fit for this app's notification/DB
 needs even at demo scale, which is part of why AWS was chosen over them this time.
 
-## Current status (2026-10-09)
+## Current status (2026-10-10)
 
 **Domain layer for v1 is done** (`app/domain/`, 100% test coverage, all pushed to `main`):
 - `Monitor` — `is_due(now)`: due from `last_checked_at + check_interval - DUE_TOLERANCE`
@@ -255,10 +255,21 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
   user ids (sequences keep counting across rolled-back tests).
 - Lesson: name every constraint (unique, FK) — needed for precise `IntegrityError` mapping and
   for working downgrades. A naming convention on `Base.metadata` would automate it.
-- Next: a real `PasswordHasher` in `app/infrastructure/` — decide between the `passlib[bcrypt]` +
-  `bcrypt<4.1` pin already in `requirements.txt` and `bcrypt` directly / `pwdlib` (passlib is
-  unmaintained). Then PyJWT tokens (user id + expiry, `SECRET_KEY` from settings, injected
-  clock; reject expired/tampered). Then the API: register (201/409), login via
+- `BcryptPasswordHasher` (`app/infrastructure/password_hasher.py`) — `bcrypt` 5 used directly;
+  `passlib` and its `bcrypt<4.1` pin were removed from `requirements.txt` (passlib is
+  unmaintained). `MAX_PASSWORD_BYTES = 72` measured on the **UTF-8 bytes** (`"ą" * 37` is 37 chars
+  but 74 bytes — tested): `hash` raises `PasswordTooLong`; `verify` returns `False` *before*
+  calling bcrypt, because bcrypt 5's `checkpw` also raises on long input and login must answer
+  "invalid credentials", not crash. Default `rounds=12` (each +1 doubles the cost; the login
+  timing protection relies on `verify` being slow) — pinned by a test on the `$2b$12$` prefix;
+  tests pass `rounds=4` to stay fast. Cost is stored in each hash, so raising it later keeps old
+  hashes valid.
+- Open: password length rules belong in `AuthService.register` too (min length undecided; the
+  72-byte max currently only lives in the hasher as a safety net).
+- Next: JWT with **PyJWT** (replace `python-jose` in `requirements.txt`, barely maintained) — a
+  token service: create for a user id with expiry, decode back to the id; reject expired (inject
+  the clock) and tampered/wrong-secret tokens with a domain `InvalidToken`, never PyJWT's own
+  errors; `SECRET_KEY` from settings. Then the API: register (201/409), login via
   `OAuth2PasswordRequestForm` (so `/docs` Authorize works; 401), `get_current_user`, a
   per-request DB-session dependency overridden in tests with `session_factory`; build
   `AuthService` once at startup (its constructor hashes the dummy password). Then monitor CRUD
