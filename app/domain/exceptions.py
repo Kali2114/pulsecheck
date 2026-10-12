@@ -24,3 +24,7 @@ class InvalidCredentials(Exception):
 
 class PasswordTooLong(Exception):
     """Raised when a password is too long"""
+
+
+class InvalidToken(Exception):
+    """Raised when a token is invalid"""
