@@ -13,6 +13,7 @@ class TestAuthService:
         self.service = AuthService(
             user_repository=self.repo,
             password_hasher=self.hasher,
+            dummy_hash=AuthService.make_dummy_hash(self.hasher),
         )
 
     def test_register_success(self):
@@ -69,3 +70,27 @@ class TestAuthService:
     def test_login_with_dummy_password_for_unknown_email_is_rejected(self):
         with pytest.raises(InvalidCredentials):
             self.service.login("unknown@example.com", AuthService.DUMMY_PASSWORD)
+
+    def test_make_dummy_hash_hashes_the_dummy_password(self):
+        dummy_hash = AuthService.make_dummy_hash(self.hasher)
+
+        assert self.hasher.verify(AuthService.DUMMY_PASSWORD, dummy_hash)
+
+    def test_constructing_the_service_does_not_hash(self):
+        hasher = FakePasswordHasher()
+
+        AuthService(
+            user_repository=self.repo,
+            password_hasher=hasher,
+            dummy_hash="hashed:precomputed",
+        )
+
+        assert hasher.hash_calls == []
+
+    def test_login_for_unknown_email_verifies_against_the_given_dummy_hash(self):
+        with pytest.raises(InvalidCredentials):
+            self.service.login("unknown@example.com", "test_pass")
+
+        assert self.hasher.verify_calls == [
+            ("test_pass", AuthService.make_dummy_hash(self.hasher))
+        ]

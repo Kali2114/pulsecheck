@@ -15,10 +15,15 @@ class AuthService:
         self,
         user_repository: UserRepository,
         password_hasher: PasswordHasher,
+        dummy_hash: str,
     ) -> None:
         self.user_repository = user_repository
         self.password_hasher = password_hasher
-        self._dummy_hash = password_hasher.hash(self.DUMMY_PASSWORD)
+        self._dummy_hash = dummy_hash
+
+    @classmethod
+    def make_dummy_hash(cls, password_hasher: PasswordHasher) -> str:
+        return password_hasher.hash(cls.DUMMY_PASSWORD)
 
     def register(self, email: str, password: str) -> User:
         normalized_email = normalize_email(email)
