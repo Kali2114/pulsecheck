@@ -227,11 +227,13 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
   raises `EmailAlreadyRegistered` for a taken email in any case, stores only the hash.
 - `login(email, password)` normalises the same way and raises **one** `InvalidCredentials` for
   both unknown email and wrong password (no account enumeration). Timing too: `verify` always runs
-  exactly once — against a dummy hash (`DUMMY_PASSWORD`, hashed once in `__init__`) when the user
-  doesn't exist — so with a real, deliberately slow hasher an unknown email isn't answered faster.
+  exactly once — against a dummy hash (of `DUMMY_PASSWORD`) when the user doesn't exist — so
+  with a real, deliberately slow hasher an unknown email isn't answered faster.
   The `user is None` check still guards, so the dummy password never logs anyone in (a test pins
-  it; dropping the check turns it red). Cost: constructing `AuthService` calls `hash` once (~100ms
-  with bcrypt/argon2) — build it once at startup rather than per request.
+  it; dropping the check turns it red). The dummy hash is passed **into** the constructor
+  (`AuthService(user_repository, password_hasher, dummy_hash)`), made once with
+  `AuthService.make_dummy_hash(hasher)` — construction does no hashing (tested via the fake's
+  `hash_calls`), so building a service per request is cheap.
 - Exceptions added: `EmailAlreadyRegistered`, `InvalidCredentials` (for login), `UserNotFound`
   (currently unused — keep for a future `get_user(user_id)` or remove).
 - Not done: a minimum password length rule (decide before the API).
@@ -300,11 +302,23 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
 - Rule: **100% coverage before every commit** — an uncovered line is never "optional".
 - Open: does FastAPI 0.141.1 run the code after `yield` before or after sending the response?
   If after, a failing `commit()` can't turn into an error response — check before relying on it.
-- Next: how a request gets an `AuthService` — it needs the per-request session (via the user
-  repository), but its constructor hashes the dummy password (~250ms at 12 rounds). Plan: compute
-  the dummy hash once at startup and pass it into the constructor, so per-request construction
-  is cheap. Then endpoints: register (201 / 409 for `EmailAlreadyRegistered`), login via
-  `OAuth2PasswordRequestForm` (so `/docs` Authorize works; 401 for `InvalidCredentials`),
-  `get_current_user` (401 for `InvalidToken`). Token service built once with `SECRET_KEY` from
-  settings (check it's ≥32 bytes, maybe enforce in `Settings`). Decide the password length rules
-  (`PasswordTooLong`, min length) for register. Then monitor CRUD API, then the dashboard.
+- Auth dependencies (`app/api/dependencies.py`): `get_password_hasher()` → one shared
+  `BcryptPasswordHasher` (`@lru_cache`); `_dummy_hash_for(hasher)` (`@lru_cache`, keyed by the
+  hasher instance) computes the dummy hash once per hasher; `get_auth_service(db, hasher)` builds
+  an `AuthService` per request from the request's session (`SQLAlchemyUserRepository(db)`), the
+  shared hasher and the cached dummy hash. Tests pin "one shared hasher", "uses the request
+  session" and "dummy hash computed once" (mutation-checked: removing the cache → red).
+- **Gotcha for API tests:** override `get_password_hasher` with **one shared** fake/low-cost
+  instance (`lambda: hasher`), never the class — FastAPI would call the class per request, so
+  every request gets a new hasher, a recomputed dummy hash and a new `lru_cache` entry.
+- Next: the register endpoint, test-first — router in `app/api/auth.py` included in
+  `app/main.py`; pydantic request (`email` — `EmailStr`, `email-validator` is already a dep —
+  and `password`) and response (`id`, `email`, **never** the hash); `TestClient` tests overriding
+  `get_session_factory` (→ `session_factory` fixture) and `get_password_hasher`. Cases: 201 with
+  id + normalised email; 409 for `EmailAlreadyRegistered`; 422 for a malformed email; a clear
+  error for a too-long password. Map domain exceptions to HTTP with app exception handlers
+  (`EmailAlreadyRegistered` → 409, later `InvalidCredentials`/`InvalidToken` → 401) to keep
+  routes thin. Decide the password length rules (min length; `PasswordTooLong` max). Then login
+  via `OAuth2PasswordRequestForm` (so `/docs` Authorize works), the token service built once
+  with `SECRET_KEY` from settings (check ≥32 bytes, maybe enforce in `Settings`),
+  `get_current_user`. Then monitor CRUD API, then the dashboard.
