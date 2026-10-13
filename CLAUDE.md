@@ -94,7 +94,7 @@ cost. Fly.io has no free tier as of late 2024; Render's free tier blocks outboun
 has no persistent disk on the free plan — neither is a good fit for this app's notification/DB
 needs even at demo scale, which is part of why AWS was chosen over them this time.
 
-## Current status (2026-10-10)
+## Current status (2026-10-13)
 
 **Domain layer for v1 is done** (`app/domain/`, 100% test coverage, all pushed to `main`):
 - `Monitor` — `is_due(now)`: due from `last_checked_at + check_interval - DUE_TOLERANCE`
@@ -211,7 +211,7 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
   AS gap FROM check_results ORDER BY id;`
 - **The checker part of v1 is done.**
 
-**Auth, in progress — domain done, users in Postgres** (pushed to `main`):
+**Auth, in progress — all building blocks done, API next** (pushed to `main`):
 - `User(email, hashed_password, id=None)` (`app/domain/user.py`) — deliberately minimal: no
   name / is_active until something uses them. The field is `hashed_password` everywhere (User,
   `create_user`, the hasher's `verify(password, hashed_password)`).
@@ -266,11 +266,26 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
   hashes valid.
 - Open: password length rules belong in `AuthService.register` too (min length undecided; the
   72-byte max currently only lives in the hasher as a safety net).
-- Next: JWT with **PyJWT** (replace `python-jose` in `requirements.txt`, barely maintained) — a
-  token service: create for a user id with expiry, decode back to the id; reject expired (inject
-  the clock) and tampered/wrong-secret tokens with a domain `InvalidToken`, never PyJWT's own
-  errors; `SECRET_KEY` from settings. Then the API: register (201/409), login via
-  `OAuth2PasswordRequestForm` (so `/docs` Authorize works; 401), `get_current_user`, a
-  per-request DB-session dependency overridden in tests with `session_factory`; build
-  `AuthService` once at startup (its constructor hashes the dummy password). Then monitor CRUD
-  API, then the dashboard.
+- `JWTTokenService(secret_key, token_lifetime)` (`app/infrastructure/jwt_token_service.py`,
+  PyJWT — `python-jose` removed from `requirements.txt`): `create_access_token(user_id, now)` →
+  `sub` (user id **as str**) + `exp = now + token_lifetime`; `decode_access_token(token, now)`
+  → int user id. Time is passed in to **both**: PyJWT's own expiry check is off
+  (`verify_exp: False`) and `exp` is compared with the given `now` — a fixed `now` with
+  PyJWT's real-clock check made a test that would start failing on its own (time bomb).
+  Expired *at* `exp` (`now >= expires_at`), valid one second before — both pinned. Decoding
+  fixes `algorithms=["HS256"]` (never let the token pick its algorithm) and
+  `require: ["sub", "exp"]`; every `PyJWTError` → domain `InvalidToken` (`from None`). JWT
+  `exp` is whole seconds — keep test times free of microseconds at boundaries.
+- Test gotchas learned: HS256 secrets must be ≥32 bytes (PyJWT warns
+  `InsecureKeyLengthWarning`) — applies to the real `SECRET_KEY` too; a tampered-token test
+  must change the signature *reliably* (insert a char, or replace with a guaranteed-different
+  one — the last base64 char may carry no data); the missing-claim tests build tokens with
+  `jwt.encode` directly and were mutation-checked (empty `require` → `KeyError`).
+- Next: the API. A per-request DB-session dependency (open → commit on success / rollback on
+  error → close, same unit of work as `run_check`), overridden in tests with
+  `session_factory`; build `AuthService` (hashes the dummy password in `__init__`) and the
+  token service once at startup; `SECRET_KEY` from settings (check it's ≥32 bytes, maybe
+  enforce in `Settings`). Endpoints: register (201 / 409 for `EmailAlreadyRegistered`), login
+  via `OAuth2PasswordRequestForm` (so `/docs` Authorize works; 401 for `InvalidCredentials`),
+  `get_current_user` (401 for `InvalidToken`). Decide the password length rules
+  (`PasswordTooLong`, min length) for register. Then monitor CRUD API, then the dashboard.
