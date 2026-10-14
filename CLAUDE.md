@@ -94,7 +94,7 @@ cost. Fly.io has no free tier as of late 2024; Render's free tier blocks outboun
 has no persistent disk on the free plan — neither is a good fit for this app's notification/DB
 needs even at demo scale, which is part of why AWS was chosen over them this time.
 
-## Current status (2026-10-13)
+## Current status (2026-10-14)
 
 **Domain layer for v1 is done** (`app/domain/`, 100% test coverage, all pushed to `main`):
 - `Monitor` — `is_due(now)`: due from `last_checked_at + check_interval - DUE_TOLERANCE`
@@ -266,8 +266,12 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
   timing protection relies on `verify` being slow) — pinned by a test on the `$2b$12$` prefix;
   tests pass `rounds=4` to stay fast. Cost is stored in each hash, so raising it later keeps old
   hashes valid.
-- Open: password length rules belong in `AuthService.register` too (min length undecided; the
-  72-byte max currently only lives in the hasher as a safety net).
+- Password length rules (decided): min **8 characters** in the API schema (`UserCreate`,
+  `Field(min_length=8)`); max **`MAX_PASSWORD_BYTES = 72` UTF-8 bytes** is a *domain* rule in
+  `app/domain/auth_service.py` — `register` raises `PasswordTooLong` (checked after the duplicate
+  check, so taken email + long password → 409); the bcrypt hasher imports the same constant and
+  keeps its check as a safety net. It moved to the domain because API tests use the fake hasher,
+  which has no limit — a 73-byte register returned 201 until then.
 - `JWTTokenService(secret_key, token_lifetime)` (`app/infrastructure/jwt_token_service.py`,
   PyJWT — `python-jose` removed from `requirements.txt`): `create_access_token(user_id, now)` →
   `sub` (user id **as str**) + `exp = now + token_lifetime`; `decode_access_token(token, now)`
@@ -311,14 +315,32 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
 - **Gotcha for API tests:** override `get_password_hasher` with **one shared** fake/low-cost
   instance (`lambda: hasher`), never the class — FastAPI would call the class per request, so
   every request gets a new hasher, a recomputed dummy hash and a new `lru_cache` entry.
-- Next: the register endpoint, test-first — router in `app/api/auth.py` included in
-  `app/main.py`; pydantic request (`email` — `EmailStr`, `email-validator` is already a dep —
-  and `password`) and response (`id`, `email`, **never** the hash); `TestClient` tests overriding
-  `get_session_factory` (→ `session_factory` fixture) and `get_password_hasher`. Cases: 201 with
-  id + normalised email; 409 for `EmailAlreadyRegistered`; 422 for a malformed email; a clear
-  error for a too-long password. Map domain exceptions to HTTP with app exception handlers
-  (`EmailAlreadyRegistered` → 409, later `InvalidCredentials`/`InvalidToken` → 401) to keep
-  routes thin. Decide the password length rules (min length; `PasswordTooLong` max). Then login
-  via `OAuth2PasswordRequestForm` (so `/docs` Authorize works), the token service built once
-  with `SECRET_KEY` from settings (check ≥32 bytes, maybe enforce in `Settings`),
-  `get_current_user`. Then monitor CRUD API, then the dashboard.
+- `POST /auth/register` (`app/api/auth.py`, `APIRouter(prefix="/auth", tags=["auth"])`,
+  included in `app/main.py`): body `UserCreate` (`EmailStr` + password), `response_model=UserRead`
+  (`id`, `email` — `from_attributes=True`, so the route returns the domain `User` and FastAPI
+  drops the hash), 201. Schemas live in `app/api/schemas.py`. `EmailStr` strips spaces and
+  lowercases only the *domain*; full lowercasing is `AuthService`'s job — tests send mixed case to
+  prove the domain ran.
+- Errors: app exception handlers in `main.py` — `EmailAlreadyRegistered` → 409,
+  `PasswordTooLong` → 422, body `{"detail": str(exc)}`. `EmailAlreadyRegistered(email)` builds
+  its own message (`"Email <normalised email> already registered"`) so the service check and the
+  repository's DB-race path say the same thing; pinned with `pytest.raises(match=...)` +
+  `re.escape` in domain, repository and API tests. Registration's 409 does reveal that an email
+  exists (accepted for a sign-up form; login doesn't).
+- API tests: `tests/api/conftest.py` `client` fixture — overrides `get_session_factory` (test
+  `session_factory`) and `get_password_hasher` (one shared `FakePasswordHasher`), yields
+  `with TestClient(app)`, then `app.dependency_overrides.clear()` (the dict is global). Assert
+  response keys exactly (`{"id", "email"}`) so nothing can leak.
+- **PyCharm gotcha:** auto-import kept suggesting `from domain...` / `from config...` (no `app.`)
+  — broke app startup three times. Likely `app/` marked as a Sources Root; unmark it so only the
+  project root is a root.
+- Next: login, test-first — `OAuth2PasswordRequestForm` (form data via `data=`, fields
+  `username` = email and `password`, so `/docs` Authorize works); response
+  `{"access_token": ..., "token_type": "bearer"}`; a `get_token_service` dependency (one
+  `JWTTokenService` from `settings.secret_key` + a lifetime) and a clock dependency (`get_now`) so
+  tests control time; override both in API tests (secret ≥32 bytes). Cases: 200 with a token
+  that decodes to the user id; normalised email logs in; wrong password → 401; unknown email →
+  401 with the **same body**. Handler `InvalidCredentials` → 401 with `WWW-Authenticate: Bearer`.
+  Check the real `SECRET_KEY` is ≥32 random bytes (`secrets.token_urlsafe(32)`), maybe enforce
+  in `Settings`. Then `get_current_user` (`InvalidToken` → 401), then monitor CRUD API, then the
+  dashboard.
