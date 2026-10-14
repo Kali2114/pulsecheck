@@ -334,13 +334,25 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
 - **PyCharm gotcha:** auto-import kept suggesting `from domain...` / `from config...` (no `app.`)
   — broke app startup three times. Likely `app/` marked as a Sources Root; unmark it so only the
   project root is a root.
-- Next: login, test-first — `OAuth2PasswordRequestForm` (form data via `data=`, fields
-  `username` = email and `password`, so `/docs` Authorize works); response
-  `{"access_token": ..., "token_type": "bearer"}`; a `get_token_service` dependency (one
-  `JWTTokenService` from `settings.secret_key` + a lifetime) and a clock dependency (`get_now`) so
-  tests control time; override both in API tests (secret ≥32 bytes). Cases: 200 with a token
-  that decodes to the user id; normalised email logs in; wrong password → 401; unknown email →
-  401 with the **same body**. Handler `InvalidCredentials` → 401 with `WWW-Authenticate: Bearer`.
-  Check the real `SECRET_KEY` is ≥32 random bytes (`secrets.token_urlsafe(32)`), maybe enforce
-  in `Settings`. Then `get_current_user` (`InvalidToken` → 401), then monitor CRUD API, then the
-  dashboard.
+- `POST /auth/login` (`app/api/auth.py`): `OAuth2PasswordRequestForm` (form data — tests send
+  `data=`, not `json=`; `username` carries the email) so `/docs` Authorize works; needs
+  **`python-multipart`** (now in `requirements.txt` — without it importing the router crashes the
+  app). Returns `TokenResponse` `{"access_token", "token_type": "bearer"}`. Reads the clock only
+  through `get_now()` (`datetime.now(UTC)`, the one place); the token service comes from
+  `get_token_service()` (`settings.secret_key`, 15-minute lifetime). API tests override both
+  (`tests/api/conftest.py`: `token_service` fixture with a 46-byte secret, fixed `now` fixture)
+  and decode the returned token back to the user id. Assert status first, then shape, then
+  decode — otherwise a 404 shows up as a confusing `KeyError`.
+- `InvalidCredentials` → 401 with `WWW-Authenticate: Bearer` (header pinned by a test); the
+  domain message `"Invalid credentials"` is the `detail`; wrong password and unknown email return
+  the identical body (no enumeration at the API level either).
+- `Settings.secret_key` is **required**, validated ≥ `MIN_SECRET_KEY_BYTES = 32` UTF-8 bytes at
+  startup (`field_validator`; tests: 32 ok, 31 rejected, `"ą" * 16` ok). Local `.env` key is 43
+  bytes, CI's 36. Make a key with `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
+- Next: `get_current_user` — `OAuth2PasswordBearer(tokenUrl="/auth/login")` reads the bearer
+  token; decode with the token service + `get_now`; load the user by id (a repository
+  `get_user(user_id)` — first real use for `UserNotFound`). `InvalidToken` (and a missing user) →
+  401 with `WWW-Authenticate: Bearer`. Test via a small protected `GET /auth/me` (useful for the
+  dashboard): valid token → 200 + user; no token → 401; garbage → 401; expired (fixed `now` past
+  expiry) → 401; token for a deleted user → 401. Then monitor CRUD API scoped to the current
+  user, then the dashboard.
