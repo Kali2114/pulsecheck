@@ -11,7 +11,9 @@ class InvalidMonitorUpdate(ValueError):
 
 
 class EmailAlreadyRegistered(Exception):
-    """Raised when an email is already registered"""
+    def __init__(self, email: str) -> None:
+        self.email = email
+        super().__init__(f"Email {email} already registered")
 
 
 class UserNotFound(Exception):

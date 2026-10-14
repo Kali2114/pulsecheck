@@ -24,7 +24,7 @@ class SQLAlchemyUserRepository:
             constraint_name = exc.orig.diag.constraint_name
 
             if constraint_name == "uq_users_email":
-                raise EmailAlreadyRegistered("Email already registered.") from None
+                raise EmailAlreadyRegistered(user.email) from None
 
             raise
 

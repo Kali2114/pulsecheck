@@ -1,5 +1,6 @@
 import pytest
 
+from app.domain.auth_service import MAX_PASSWORD_BYTES
 from app.domain.exceptions import PasswordTooLong
 from app.domain.password_hasher import PasswordHasher
 from app.infrastructure.password_hasher import BcryptPasswordHasher
@@ -32,19 +33,19 @@ class TestBcryptPasswordHasher:
         assert self.hasher.verify(self.password, second_hashed_password) is True
 
     def test_hashing_raises_when_password_exceeds_72_bytes(self):
-        password = "a" * (BcryptPasswordHasher.MAX_PASSWORD_BYTES + 1)
+        password = "a" * (MAX_PASSWORD_BYTES + 1)
 
         with pytest.raises(PasswordTooLong):
             self.hasher.hash(password)
 
     def test_verify_returns_false_for_password_over_72_bytes(self):
         hashed_password = self.hasher.hash(self.password)
-        too_long = "a" * (BcryptPasswordHasher.MAX_PASSWORD_BYTES + 1)
+        too_long = "a" * (MAX_PASSWORD_BYTES + 1)
 
         assert self.hasher.verify(too_long, hashed_password) is False
 
     def test_hashing_accepts_password_of_exactly_72_bytes(self):
-        password = "a" * BcryptPasswordHasher.MAX_PASSWORD_BYTES
+        password = "a" * MAX_PASSWORD_BYTES
 
         hashed_password = self.hasher.hash(password)
 

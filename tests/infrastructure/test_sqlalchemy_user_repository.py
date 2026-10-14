@@ -1,3 +1,5 @@
+import re
+
 import pytest
 from sqlalchemy.exc import IntegrityError
 
@@ -27,7 +29,10 @@ class TestSQLAlchemyUserRepository:
     def test_add_user_with_existing_email_raises(self):
         self.repository.add_user(self.user)
         other_user = create_user()
-        with pytest.raises(EmailAlreadyRegistered):
+        with pytest.raises(
+            EmailAlreadyRegistered,
+            match=rf"Email {re.escape(other_user.email)} already registered",
+        ):
             self.repository.add_user(other_user)
 
         received = self.repository.get_by_email(self.user.email)
