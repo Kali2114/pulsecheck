@@ -1,12 +1,15 @@
 from collections.abc import Generator
+from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 
 from fastapi import Depends
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.config import settings
 from app.domain.auth_service import AuthService
 from app.domain.password_hasher import PasswordHasher
 from app.infrastructure.database import SessionLocal
+from app.infrastructure.jwt_token_service import JWTTokenService
 from app.infrastructure.password_hasher import BcryptPasswordHasher
 from app.infrastructure.user_repository import SQLAlchemyUserRepository
 
@@ -46,3 +49,14 @@ def get_auth_service(
         password_hasher=password_hasher,
         dummy_hash=_dummy_hash_for(password_hasher),
     )
+
+
+def get_token_service() -> JWTTokenService:
+    return JWTTokenService(
+        secret_key=settings.secret_key,
+        token_lifetime=timedelta(minutes=15),
+    )
+
+
+def get_now() -> datetime:
+    return datetime.now(UTC)

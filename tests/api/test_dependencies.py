@@ -1,13 +1,19 @@
+from datetime import UTC, datetime
+
 import pytest
 
 from app.api.dependencies import (
     get_auth_service,
     get_db,
+    get_now,
     get_password_hasher,
     get_session_factory,
+    get_token_service,
 )
+from app.config import settings
 from app.domain.auth_service import AuthService
 from app.infrastructure.database import SessionLocal
+from app.infrastructure.jwt_token_service import JWTTokenService
 from app.infrastructure.password_hasher import BcryptPasswordHasher
 from app.infrastructure.user_repository import SQLAlchemyUserRepository
 from tests.domain.fakes import FakePasswordHasher
@@ -73,3 +79,24 @@ class TestAuthDependencies:
         get_auth_service(db_session, hasher)
 
         assert hasher.hash_calls == [AuthService.DUMMY_PASSWORD]
+
+
+class TestTokenAndClockDependencies:
+    def test_token_service_signs_with_the_configured_secret_key(self):
+        now = datetime(2026, 10, 14, 12, 0, tzinfo=UTC)
+        token = get_token_service().create_access_token(42, now=now)
+
+        verifier = JWTTokenService(
+            secret_key=settings.secret_key,
+            token_lifetime=get_token_service().token_lifetime,
+        )
+
+        assert verifier.decode_access_token(token, now=now) == 42
+
+    def test_now_returns_the_current_utc_time(self):
+        before = datetime.now(UTC)
+        result = get_now()
+        after = datetime.now(UTC)
+
+        assert result.tzinfo == UTC
+        assert before <= result <= after

@@ -7,6 +7,7 @@ from app.api.auth import router as auth_router
 from app.config import settings
 from app.domain.exceptions import (
     EmailAlreadyRegistered,
+    InvalidCredentials,
     PasswordTooLong,
 )
 from app.infrastructure.scheduler_runner import (
@@ -47,4 +48,16 @@ def email_already_registered_handler(
 def password_too_long(request: Request, exc: PasswordTooLong) -> JSONResponse:
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, content={"detail": str(exc)}
+    )
+
+
+@app.exception_handler(InvalidCredentials)
+def invalid_credentials_handler(
+    _request: Request,
+    exc: InvalidCredentials,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        content={"detail": str(exc)},
+        headers={"WWW-Authenticate": "Bearer"},
     )

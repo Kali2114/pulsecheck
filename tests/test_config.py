@@ -1,6 +1,7 @@
 import pytest
+from pydantic import ValidationError
 
-from app.config import Settings
+from app.config import MIN_SECRET_KEY_BYTES, Settings
 
 
 def create_settings(**kwargs) -> Settings:
@@ -10,6 +11,7 @@ def create_settings(**kwargs) -> Settings:
         "postgres_db": "pulsecheck",
         "postgres_test_db": "pulsecheck_test",
         "postgres_port": 5434,
+        "secret_key": "a" * 32,
     }
     payload.update(kwargs)
     return Settings(_env_file=None, **payload)
@@ -69,3 +71,20 @@ def test_str_of_url_hides_password():
 def test_missing_required_setting_raises():
     with pytest.raises(ValueError):
         Settings(_env_file=None)
+
+
+def test_secret_key_of_minimum_length_is_accepted():
+    settings = create_settings(secret_key="a" * MIN_SECRET_KEY_BYTES)
+
+    assert settings.secret_key == "a" * MIN_SECRET_KEY_BYTES
+
+
+def test_secret_key_shorter_than_minimum_is_rejected():
+    with pytest.raises(ValidationError, match="secret_key"):
+        create_settings(secret_key="a" * (MIN_SECRET_KEY_BYTES - 1))
+
+
+def test_secret_key_length_counts_bytes_not_characters():
+    settings = create_settings(secret_key="ą" * 16)
+
+    assert settings.secret_key == "ą" * 16

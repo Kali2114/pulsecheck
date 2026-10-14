@@ -4,6 +4,7 @@
 # Web
 fastapi>=0.115
 uvicorn[standard]>=0.30
+python-multipart>=0.0.20  # form data, needed by OAuth2PasswordRequestForm (login)
 
 # Persistence — Postgres (decided 2026-09-29, see CLAUDE.md)
 sqlalchemy>=2.0

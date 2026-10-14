@@ -49,5 +49,5 @@ class AuthService:
         hashed_password = user.hashed_password if user else self._dummy_hash
         password_matches = self.password_hasher.verify(password, hashed_password)
         if user is None or not password_matches:
-            raise InvalidCredentials("Invalid credentials.")
+            raise InvalidCredentials("Invalid credentials")
         return user

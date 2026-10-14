@@ -11,3 +11,8 @@ class UserRead(BaseModel):
 
     id: int
     email: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str

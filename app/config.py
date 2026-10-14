@@ -1,5 +1,8 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import URL
+
+MIN_SECRET_KEY_BYTES = 32
 
 
 class Settings(BaseSettings):
@@ -10,11 +13,19 @@ class Settings(BaseSettings):
     postgres_port: int
     postgres_host: str = "localhost"
     scheduler_enabled: bool = True
+    secret_key: str
 
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore",
     )
+
+    @field_validator("secret_key")
+    @classmethod
+    def secret_key_must_be_long_enough(cls, value: str) -> str:
+        if len(value.encode("utf-8")) < MIN_SECRET_KEY_BYTES:
+            raise ValueError(f"must be at least {MIN_SECRET_KEY_BYTES} bytes for HS256")
+        return value
 
     def _build_database_url(self, database_name: str) -> URL:
         return URL.create(
