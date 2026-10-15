@@ -94,7 +94,7 @@ cost. Fly.io has no free tier as of late 2024; Render's free tier blocks outboun
 has no persistent disk on the free plan — neither is a good fit for this app's notification/DB
 needs even at demo scale, which is part of why AWS was chosen over them this time.
 
-## Current status (2026-10-14)
+## Current status (2026-10-15)
 
 **Domain layer for v1 is done** (`app/domain/`, 100% test coverage, all pushed to `main`):
 - `Monitor` — `is_due(now)`: due from `last_checked_at + check_interval - DUE_TOLERANCE`
@@ -235,8 +235,7 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
   `AuthService.make_dummy_hash(hasher)` — construction does no hashing (tested via the fake's
   `hash_calls`), so building a service per request is cheap.
 - Exceptions added: `EmailAlreadyRegistered`, `InvalidCredentials` (for login), `UserNotFound`
-  (currently unused — keep for a future `get_user(user_id)` or remove).
-- Not done: a minimum password length rule (decide before the API).
+  (raised by `get_by_id` for an unknown id).
 - `UserModel` (table `users`) with a **named** unique constraint `uq_users_email`. Email
   uniqueness in the DB is case-sensitive — case-insensitivity relies on `AuthService`
   normalising (accepted; `lower(email)` index / `citext` would enforce it in the DB).
@@ -349,10 +348,17 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
 - `Settings.secret_key` is **required**, validated ≥ `MIN_SECRET_KEY_BYTES = 32` UTF-8 bytes at
   startup (`field_validator`; tests: 32 ok, 31 rejected, `"ą" * 16` ok). Local `.env` key is 43
   bytes, CI's 36. Make a key with `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
-- Next: `get_current_user` — `OAuth2PasswordBearer(tokenUrl="/auth/login")` reads the bearer
-  token; decode with the token service + `get_now`; load the user by id (a repository
-  `get_user(user_id)` — first real use for `UserNotFound`). `InvalidToken` (and a missing user) →
-  401 with `WWW-Authenticate: Bearer`. Test via a small protected `GET /auth/me` (useful for the
-  dashboard): valid token → 200 + user; no token → 401; garbage → 401; expired (fixed `now` past
-  expiry) → 401; token for a deleted user → 401. Then monitor CRUD API scoped to the current
-  user, then the dashboard.
+- `get_by_id(user_id) -> User` on the `UserRepository` Protocol and both repositories (written
+  solo, 2026-10-15): an unknown id raises `UserNotFound` — unlike `get_by_email`, a missing id is
+  an error (it comes from a valid token, so the account is gone). SQLAlchemy uses
+  `session.get(UserModel, id)` like the monitor repository; the integration test still calls
+  `expire_all()` because `session.get` serves the identity map first. Return types list what a
+  function *returns* — never `-> User | UserNotFound`; raised exceptions aren't part of the type.
+- Next: `get_current_user`. Suggested split: the dependency does the HTTP part
+  (`OAuth2PasswordBearer(tokenUrl="/auth/login")` reads the bearer token; decode with the token
+  service + `get_now`), then calls a domain method (e.g. `AuthService.get_user(user_id)` →
+  `get_by_id`). Handlers: `InvalidToken` and `UserNotFound` → 401 with `WWW-Authenticate:
+  Bearer`. Test via a small protected `GET /auth/me` (useful for the dashboard): valid token →
+  200 + `id`/`email`; no token → 401; garbage → 401; expired (decode `now` past expiry) → 401;
+  token for a deleted user → 401. Then monitor CRUD API scoped to the current user, then the
+  dashboard.
