@@ -7,9 +7,11 @@ from app.domain.exceptions import (
     EmailAlreadyRegistered,
     InvalidCredentials,
     PasswordTooLong,
+    UserNotFound,
 )
 from app.domain.user_repository import InMemoryUserRepository
 from tests.domain.fakes import FakePasswordHasher
+from tests.domain.utils import create_user
 
 
 class TestAuthService:
@@ -126,3 +128,16 @@ class TestAuthService:
         assert self.hasher.verify_calls == [
             ("test_pass", AuthService.make_dummy_hash(self.hasher))
         ]
+
+    def test_get_by_id_returns_user_for_existing_id(self):
+        user = create_user()
+        self.repo.add_user(user)
+        received_user = self.service.get_by_id(user.id)
+
+        assert received_user.id == user.id
+        assert received_user.email == user.email
+        assert received_user.hashed_password == user.hashed_password
+
+    def test_get_by_id_raises_for_unknown_id(self):
+        with pytest.raises(UserNotFound):
+            self.service.get_by_id(99)

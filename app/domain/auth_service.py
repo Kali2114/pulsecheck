@@ -51,3 +51,6 @@ class AuthService:
         if user is None or not password_matches:
             raise InvalidCredentials("Invalid credentials")
         return user
+
+    def get_by_id(self, user_id: int) -> User:
+        return self.user_repository.get_by_id(user_id)
