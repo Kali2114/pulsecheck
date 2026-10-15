@@ -1,3 +1,6 @@
+import pytest
+
+from app.domain.exceptions import UserNotFound
 from app.domain.user_repository import InMemoryUserRepository, UserRepository
 from tests.domain.utils import create_user
 
@@ -32,3 +35,15 @@ class TestUserRepository:
 
     def test_in_memory_repository_satisfies_user_repository_protocol(self):
         assert isinstance(self.user_repository, UserRepository)
+
+    def test_get_user_by_id(self):
+        self.user_repository.add_user(self.user)
+        received_user = self.user_repository.get_by_id(self.user.id)
+
+        assert received_user.id == self.user.id
+        assert received_user.email == self.user.email
+        assert received_user.hashed_password == self.user.hashed_password
+
+    def test_get_by_id_raises_for_unknown_id(self):
+        with pytest.raises(UserNotFound):
+            self.user_repository.get_by_id(99)

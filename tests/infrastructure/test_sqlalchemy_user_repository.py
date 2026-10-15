@@ -3,7 +3,7 @@ import re
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from app.domain.exceptions import EmailAlreadyRegistered
+from app.domain.exceptions import EmailAlreadyRegistered, UserNotFound
 from app.domain.user_repository import UserRepository
 from app.infrastructure.user_repository import SQLAlchemyUserRepository
 from tests.domain.utils import create_user
@@ -53,10 +53,23 @@ class TestSQLAlchemyUserRepository:
         assert added_user.email == received.email
         assert added_user.hashed_password == received.hashed_password
 
-    def test_get_user_by_email_returns_none_for_unknown_email(self):
+    def test_get_by_email_returns_none_for_unknown_email(self):
         received_user = self.repository.get_by_email("non_existent_email@example.com")
 
         assert received_user is None
+
+    def test_get_by_id(self):
+        added_user = self.repository.add_user(self.user)
+        self.db_session.expire_all()
+        received_user = self.repository.get_by_id(added_user.id)
+
+        assert added_user.id == received_user.id
+        assert added_user.email == received_user.email
+        assert added_user.hashed_password == received_user.hashed_password
+
+    def test_get_by_id_raises_for_unknown_id(self):
+        with pytest.raises(UserNotFound):
+            self.repository.get_by_id(99)
 
     def test_sqlalchemy_repository_satisfies_user_repository_protocol(self):
         assert isinstance(self.repository, UserRepository)

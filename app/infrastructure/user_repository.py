@@ -2,7 +2,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.domain.exceptions import EmailAlreadyRegistered
+from app.domain.exceptions import EmailAlreadyRegistered, UserNotFound
 from app.domain.user import User
 from app.infrastructure.models import UserModel
 
@@ -36,6 +36,12 @@ class SQLAlchemyUserRepository:
         result = self.session.execute(statement).scalars().first()
         if result is None:
             return None
+        return self._to_domain(result)
+
+    def get_by_id(self, user_id: int) -> User:
+        result = self.session.get(UserModel, user_id)
+        if result is None:
+            raise UserNotFound(f"User with id {user_id} not found")
         return self._to_domain(result)
 
     @staticmethod
