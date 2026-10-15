@@ -354,11 +354,14 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
   `session.get(UserModel, id)` like the monitor repository; the integration test still calls
   `expire_all()` because `session.get` serves the identity map first. Return types list what a
   function *returns* — never `-> User | UserNotFound`; raised exceptions aren't part of the type.
-- Next: `get_current_user`. Suggested split: the dependency does the HTTP part
-  (`OAuth2PasswordBearer(tokenUrl="/auth/login")` reads the bearer token; decode with the token
-  service + `get_now`), then calls a domain method (e.g. `AuthService.get_user(user_id)` →
-  `get_by_id`). Handlers: `InvalidToken` and `UserNotFound` → 401 with `WWW-Authenticate:
-  Bearer`. Test via a small protected `GET /auth/me` (useful for the dashboard): valid token →
-  200 + `id`/`email`; no token → 401; garbage → 401; expired (decode `now` past expiry) → 401;
-  token for a deleted user → 401. Then monitor CRUD API scoped to the current user, then the
-  dashboard.
+- `AuthService.get_by_id(user_id) -> User` — a pass-through to the repository that lets
+  `UserNotFound` propagate. The HTTP layer only ever talks to `AuthService`, never to a
+  repository, so a future rule (e.g. blocked accounts) lands here without touching routes.
+- Next: `get_current_user` in `app/api/dependencies.py` — `OAuth2PasswordBearer(tokenUrl=
+  "/auth/login")` reads the bearer token; decode with the token service + `get_now`; then
+  `AuthService.get_by_id`. Handlers: `InvalidToken` and `UserNotFound` → 401 with
+  `WWW-Authenticate: Bearer`. API tests first, via a small protected `GET /auth/me` returning
+  `UserRead` (useful for the dashboard): valid token → 200 + exactly `{"id", "email"}`; no
+  `Authorization` header → 401; garbage → 401; expired (token created with a `now` far enough in
+  the past) → 401; token for a non-existent id (created with the `token_service` fixture) → 401.
+  Then monitor CRUD API scoped to the current user, then the dashboard.
