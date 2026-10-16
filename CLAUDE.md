@@ -94,7 +94,7 @@ cost. Fly.io has no free tier as of late 2024; Render's free tier blocks outboun
 has no persistent disk on the free plan — neither is a good fit for this app's notification/DB
 needs even at demo scale, which is part of why AWS was chosen over them this time.
 
-## Current status (2026-10-15)
+## Current status (2026-10-16)
 
 **Domain layer for v1 is done** (`app/domain/`, 100% test coverage, all pushed to `main`):
 - `Monitor` — `is_due(now)`: due from `last_checked_at + check_interval - DUE_TOLERANCE`
@@ -211,7 +211,7 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
   AS gap FROM check_results ORDER BY id;`
 - **The checker part of v1 is done.**
 
-**Auth, in progress — all building blocks done, API next** (pushed to `main`):
+**Auth — done** (pushed to `main`):
 - `User(email, hashed_password, id=None)` (`app/domain/user.py`) — deliberately minimal: no
   name / is_active until something uses them. The field is `hashed_password` everywhere (User,
   `create_user`, the hasher's `verify(password, hashed_password)`).
@@ -357,11 +357,27 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
 - `AuthService.get_by_id(user_id) -> User` — a pass-through to the repository that lets
   `UserNotFound` propagate. The HTTP layer only ever talks to `AuthService`, never to a
   repository, so a future rule (e.g. blocked accounts) lands here without touching routes.
-- Next: `get_current_user` in `app/api/dependencies.py` — `OAuth2PasswordBearer(tokenUrl=
-  "/auth/login")` reads the bearer token; decode with the token service + `get_now`; then
-  `AuthService.get_by_id`. Handlers: `InvalidToken` and `UserNotFound` → 401 with
-  `WWW-Authenticate: Bearer`. API tests first, via a small protected `GET /auth/me` returning
-  `UserRead` (useful for the dashboard): valid token → 200 + exactly `{"id", "email"}`; no
-  `Authorization` header → 401; garbage → 401; expired (token created with a `now` far enough in
-  the past) → 401; token for a non-existent id (created with the `token_service` fixture) → 401.
-  Then monitor CRUD API scoped to the current user, then the dashboard.
+- `get_current_user` (`app/api/dependencies.py`): module-level
+  `oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")` reads the bearer token (it also
+  tells `/docs` where to log in, and answers a missing header itself with 401 `"Not
+  authenticated"`); decodes with `get_token_service` + `get_now`; loads the user via
+  `AuthService.get_by_id`. A valid token whose user is gone is an *authentication* failure, so
+  `get_current_user` catches `UserNotFound` and raises `InvalidToken("Invalid token") from None` —
+  **not** a global `UserNotFound` → 401 handler (exception handlers are app-wide; `UserNotFound`
+  must stay free to mean 404 in future "user by id" endpoints). Only the token's user lookup sits
+  in the `try`. FastAPI resolves each dependency once per request, so a route using both
+  `get_current_user` and `get_auth_service` shares one session.
+- `GET /auth/me` → `UserRead`. `InvalidToken` → 401 with `WWW-Authenticate: Bearer` and
+  `str(exc)` (`"Invalid token"` / `"Token expired"`). Tests pin status, detail **and** header for:
+  valid token (200, exactly `{"id", "email"}`), no header (`"Not authenticated"`), garbage,
+  expired (token created `now - token_service.token_lifetime` → expired exactly at `now`), and a
+  token for a missing user (`"Invalid token"`, never "User with id … not found").
+- Lessons: 100% coverage only means every line *ran* — coverage was already 100% while every 401
+  case was still an untested 500; a test pins whatever you decide, even a wrong status
+  (a 404 for `/auth/me` once passed green), so choosing the expected status is the real work.
+  PyCharm also auto-imported PyJWT's `InvalidTokenError` next to the domain's `InvalidToken` —
+  only the token service may import `jwt`.
+- Next: monitor CRUD API scoped to the current user (repository already has all six methods incl.
+  `list_user_monitors`): `POST /monitors`, `GET /monitors`, `GET/PATCH/DELETE /monitors/{id}`.
+  Tests with **two users**: the second gets 404 (not 403 — don't reveal it exists) for the first
+  one's monitor on get/patch/delete, and never sees it in the list. Then the dashboard.
