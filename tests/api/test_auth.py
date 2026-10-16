@@ -91,3 +91,50 @@ class TestAuth:
         response = client.post("/auth/login", data=payload)
 
         assert response.status_code == 200
+
+    def test_me_returns_current_user(self, client, registered_user, token_service, now):
+        token = token_service.create_access_token(registered_user["id"], now=now)
+        response = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+        data = response.json()
+
+        assert response.status_code == 200
+        assert set(response.json().keys()) == {"id", "email"}
+        assert data["email"] == registered_user["email"]
+        assert data["id"] == registered_user["id"]
+
+    def test_no_authorization_returns_401(self, client):
+        response = client.get("/auth/me")
+
+        assert response.status_code == 401
+        assert response.json() == {"detail": "Not authenticated"}
+        assert response.headers["www-authenticate"] == "Bearer"
+
+    def test_garbage_token_returns_401(self, client):
+        response = client.get(
+            "/auth/me", headers={"Authorization": "Bearer not-a-token"}
+        )
+
+        assert response.status_code == 401
+        assert response.json() == {"detail": "Invalid token"}
+        assert response.headers["www-authenticate"] == "Bearer"
+
+    def test_an_expired_token_returns_401(
+        self, client, registered_user, token_service, now
+    ):
+        expired_token_time = now - token_service.token_lifetime
+        token = token_service.create_access_token(
+            registered_user["id"], now=expired_token_time
+        )
+        response = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+
+        assert response.status_code == 401
+        assert response.json() == {"detail": "Token expired"}
+        assert response.headers["www-authenticate"] == "Bearer"
+
+    def test_unknown_id_returns_401(self, client, token_service, now):
+        token = token_service.create_access_token(999, now=now)
+        response = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+
+        assert response.status_code == 401
+        assert response.json() == {"detail": "Invalid token"}
+        assert response.headers["www-authenticate"] == "Bearer"

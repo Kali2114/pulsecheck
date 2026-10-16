@@ -8,6 +8,7 @@ from app.config import settings
 from app.domain.exceptions import (
     EmailAlreadyRegistered,
     InvalidCredentials,
+    InvalidToken,
     PasswordTooLong,
 )
 from app.infrastructure.scheduler_runner import (
@@ -37,7 +38,7 @@ app.include_router(auth_router)
 
 @app.exception_handler(EmailAlreadyRegistered)
 def email_already_registered_handler(
-    request: Request, exc: EmailAlreadyRegistered
+    _request: Request, exc: EmailAlreadyRegistered
 ) -> JSONResponse:
     return JSONResponse(
         status_code=status.HTTP_409_CONFLICT, content={"detail": str(exc)}
@@ -45,7 +46,7 @@ def email_already_registered_handler(
 
 
 @app.exception_handler(PasswordTooLong)
-def password_too_long(request: Request, exc: PasswordTooLong) -> JSONResponse:
+def password_too_long(_request: Request, exc: PasswordTooLong) -> JSONResponse:
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, content={"detail": str(exc)}
     )
@@ -55,6 +56,18 @@ def password_too_long(request: Request, exc: PasswordTooLong) -> JSONResponse:
 def invalid_credentials_handler(
     _request: Request,
     exc: InvalidCredentials,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        content={"detail": str(exc)},
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+@app.exception_handler(InvalidToken)
+def invalid_token_handler(
+    _request: Request,
+    exc: InvalidToken,
 ) -> JSONResponse:
     return JSONResponse(
         status_code=status.HTTP_401_UNAUTHORIZED,

@@ -3,7 +3,12 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, status
 from fastapi.security import OAuth2PasswordRequestForm
 
-from app.api.dependencies import get_auth_service, get_now, get_token_service
+from app.api.dependencies import (
+    get_auth_service,
+    get_current_user,
+    get_now,
+    get_token_service,
+)
 from app.api.schemas import TokenResponse, UserCreate, UserRead
 from app.domain.auth_service import AuthService
 from app.domain.user import User
@@ -36,3 +41,8 @@ def login_user(
         access_token=token,
         token_type="bearer",
     )
+
+
+@router.get("/me", response_model=UserRead, status_code=status.HTTP_200_OK)
+def me(current_user: User = Depends(get_current_user)) -> User:
+    return current_user
