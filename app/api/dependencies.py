@@ -9,10 +9,12 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.config import settings
 from app.domain.auth_service import AuthService
 from app.domain.exceptions import InvalidToken, UserNotFound
+from app.domain.monitor_repository import MonitorRepository
 from app.domain.password_hasher import PasswordHasher
 from app.domain.user import User
 from app.infrastructure.database import SessionLocal
 from app.infrastructure.jwt_token_service import JWTTokenService
+from app.infrastructure.monitor_repository import SQLAlchemyMonitorRepository
 from app.infrastructure.password_hasher import BcryptPasswordHasher
 from app.infrastructure.user_repository import SQLAlchemyUserRepository
 
@@ -79,3 +81,9 @@ def get_current_user(
     except UserNotFound:
         raise InvalidToken("Invalid token") from None
     return user
+
+
+def get_monitor_repository(
+    db: Session = Depends(get_db),
+) -> MonitorRepository:
+    return SQLAlchemyMonitorRepository(db)

@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
 from app.api.auth import router as auth_router
+from app.api.monitors import monitors_router
 from app.config import settings
 from app.domain.exceptions import (
     EmailAlreadyRegistered,
@@ -34,6 +35,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 app.include_router(auth_router)
+app.include_router(monitors_router)
 
 
 @app.exception_handler(EmailAlreadyRegistered)

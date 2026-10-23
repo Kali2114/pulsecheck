@@ -61,3 +61,21 @@ def registered_user(client):
         "email": "user@example.com",
         "password": "password",
     }
+
+
+@pytest.fixture
+def auth_headers(registered_user, token_service, now):
+    token = token_service.create_access_token(registered_user["id"], now=now)
+    return {
+        "Authorization": f"Bearer {token}",
+    }
+
+
+@pytest.fixture
+def monitor_payload():
+    return {
+        "url": "https://example.com",
+        "check_interval_seconds": 10,
+        "timeout_seconds": 30,
+        "retry_count": 3,
+    }
