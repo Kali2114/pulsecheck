@@ -94,7 +94,7 @@ cost. Fly.io has no free tier as of late 2024; Render's free tier blocks outboun
 has no persistent disk on the free plan — neither is a good fit for this app's notification/DB
 needs even at demo scale, which is part of why AWS was chosen over them this time.
 
-## Current status (2026-10-16)
+## Current status (2026-10-23)
 
 **Domain layer for v1 is done** (`app/domain/`, 100% test coverage, all pushed to `main`):
 - `Monitor` — `is_due(now)`: due from `last_checked_at + check_interval - DUE_TOLERANCE`
@@ -377,7 +377,22 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
   (a 404 for `/auth/me` once passed green), so choosing the expected status is the real work.
   PyCharm also auto-imported PyJWT's `InvalidTokenError` next to the domain's `InvalidToken` —
   only the token service may import `jwt`.
-- Next: monitor CRUD API scoped to the current user (repository already has all six methods incl.
-  `list_user_monitors`): `POST /monitors`, `GET /monitors`, `GET/PATCH/DELETE /monitors/{id}`.
-  Tests with **two users**: the second gets 404 (not 403 — don't reveal it exists) for the first
-  one's monitor on get/patch/delete, and never sees it in the list. Then the dashboard.
+- Monitor API (`app/api/monitors.py`, `monitors_router`, prefix `/monitors`):
+  `get_monitor_repository(db)` → `SQLAlchemyMonitorRepository` on the request session.
+  Schemas: `MonitorCreate` (`url`, `check_interval_seconds` 10–86400, `timeout_seconds` 1–60,
+  `retry_count` ≥ 1) and `MonitorRead` (adds `id`, `last_checked_at`). The API speaks seconds;
+  `_to_domain_monitor` / `_to_monitor_read` convert to/from the domain's `timedelta`.
+  - `POST /monitors` → 201 `MonitorRead`, owner is always the current user (never from the body).
+  - `GET /monitors` → `list[MonitorRead]` of the current user's monitors only, ordered by id
+    (filter + order in SQL via `list_user_monitors`); empty list is 200 `[]`.
+  - Tests (`tests/api/test_monitors.py`, class `TestMonitors`): `monitor_payload` fixture in
+    `tests/api/conftest.py`. The list test seeds via the repository on `session_factory` and
+    gets the other user from `make_user` (they never make a request, so no token needed);
+    each monitor has a distinct URL and an API-valid interval (`create_monitor` defaults to 5s,
+    which the API would reject). Compare an exact **list** of ids (pins order too), using the
+    ids *returned* by `add_monitor`.
+  - Gotcha: Postgres container stopped after a reboot → every DB test errors with "connection
+    refused" on 5434. `docker compose up -d` before pytest.
+- Next: `GET/PATCH/DELETE /monitors/{id}`. Another user's monitor → **404, not 403** (don't
+  reveal it exists) — decide how the domain's "monitor not found" maps to 404 and make a
+  foreign monitor take the same path. Then the dashboard.
