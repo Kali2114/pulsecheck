@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
 class UserCreate(BaseModel):
@@ -35,3 +35,24 @@ class MonitorRead(BaseModel):
     timeout_seconds: int
     retry_count: int
     last_checked_at: datetime | None
+
+
+class MonitorUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    url: str | None = None
+    check_interval_seconds: int | None = Field(default=None, ge=10, le=86400)
+    timeout_seconds: int | None = Field(default=None, ge=1, le=60)
+    retry_count: int | None = Field(default=None, ge=1)
+
+    @field_validator(
+        "url",
+        "check_interval_seconds",
+        "timeout_seconds",
+        "retry_count",
+    )
+    @classmethod
+    def fields_cannot_be_null(cls, value):
+        if value is None:
+            raise ValueError("field cannot be null")
+        return value

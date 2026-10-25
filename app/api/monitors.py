@@ -8,7 +8,7 @@ from app.api.dependencies import (
     get_current_user_monitor,
     get_monitor_repository,
 )
-from app.api.schemas import MonitorCreate, MonitorRead
+from app.api.schemas import MonitorCreate, MonitorRead, MonitorUpdate
 from app.domain.monitor import Monitor
 from app.domain.monitor_repository import MonitorRepository
 from app.domain.user import User
@@ -48,6 +48,18 @@ def get_monitor(
     return _to_monitor_read(current_monitor)
 
 
+@monitors_router.patch("/{monitor_id}", response_model=MonitorRead)
+def update_monitor(
+    payload: MonitorUpdate,
+    repository: MonitorRepository = Depends(get_monitor_repository),
+    current_monitor: Monitor = Depends(get_current_user_monitor),
+) -> MonitorRead:
+    changes = payload.model_dump(exclude_unset=True)
+    domain_changes = _to_domain_changes(changes)
+    updated_monitor = repository.update_monitor(current_monitor.id, domain_changes)
+    return _to_monitor_read(updated_monitor)
+
+
 def _to_domain_monitor(
     payload: MonitorCreate,
     user_id: int,
@@ -61,6 +73,26 @@ def _to_domain_monitor(
         last_checked_at=None,
     )
     return monitor
+
+
+def _to_domain_changes(changes: dict) -> dict:
+    domain_changes = {}
+
+    if "url" in changes:
+        domain_changes["url"] = changes["url"]
+
+    if "retry_count" in changes:
+        domain_changes["retry_count"] = changes["retry_count"]
+
+    if "timeout_seconds" in changes:
+        domain_changes["timeout"] = changes["timeout_seconds"]
+
+    if "check_interval_seconds" in changes:
+        domain_changes["check_interval"] = timedelta(
+            seconds=changes["check_interval_seconds"]
+        )
+
+    return domain_changes
 
 
 def _to_monitor_read(monitor: Monitor) -> MonitorRead:

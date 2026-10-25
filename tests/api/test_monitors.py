@@ -186,3 +186,191 @@ class TestMonitors:
 
         assert response.status_code == 401
         assert response.json() == {"detail": "Not authenticated"}
+
+    def test_patch_monitor_changes_all_sent_fields(
+        self, client, auth_headers, session_factory, registered_user
+    ):
+        monitor = create_monitor(
+            user_id=registered_user["id"],
+            url="https://original.example.com",
+            check_interval=timedelta(seconds=10),
+            timeout=20,
+            retry_count=3,
+        )
+        with session_factory() as session:
+            repo = SQLAlchemyMonitorRepository(session)
+            saved_monitor = repo.add_monitor(monitor)
+            session.commit()
+
+        payload = {
+            "url": "https://change.example.com",
+            "check_interval_seconds": 99,
+            "timeout_seconds": 40,
+            "retry_count": 5,
+        }
+        response = client.patch(
+            f"/monitors/{saved_monitor.id}", json=payload, headers=auth_headers
+        )
+        expected = {
+            "id": saved_monitor.id,
+            "url": "https://change.example.com",
+            "check_interval_seconds": 99,
+            "timeout_seconds": 40,
+            "retry_count": 5,
+            "last_checked_at": None,
+        }
+
+        assert response.status_code == 200
+        assert response.json() == expected
+
+        reread = client.get(f"/monitors/{saved_monitor.id}", headers=auth_headers)
+        assert reread.json() == expected
+
+    def test_patch_monitor_changes_only_sent_fields(
+        self, client, auth_headers, session_factory, registered_user
+    ):
+        monitor = create_monitor(
+            user_id=registered_user["id"],
+            url="https://original.example.com",
+            check_interval=timedelta(seconds=15),
+            timeout=20,
+            retry_count=3,
+        )
+        with session_factory() as session:
+            repo = SQLAlchemyMonitorRepository(session)
+            saved_monitor = repo.add_monitor(monitor)
+            session.commit()
+
+        response = client.patch(
+            f"/monitors/{saved_monitor.id}",
+            json={"url": "https://change.example.com"},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "id": saved_monitor.id,
+            "url": "https://change.example.com",
+            "check_interval_seconds": 15,
+            "timeout_seconds": 20,
+            "retry_count": 3,
+            "last_checked_at": None,
+        }
+
+    def test_patch_monitor_rejects_unknown_field(
+        self, client, auth_headers, session_factory, registered_user, make_user
+    ):
+        monitor = create_monitor(
+            user_id=registered_user["id"],
+            url="https://original.example.com",
+            check_interval=timedelta(seconds=10),
+        )
+        with session_factory() as session:
+            repo = SQLAlchemyMonitorRepository(session)
+            saved_monitor = repo.add_monitor(monitor)
+            session.commit()
+
+        response = client.patch(
+            f"/monitors/{saved_monitor.id}",
+            json={"user_id": make_user()},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 422
+        reread = client.get(f"/monitors/{saved_monitor.id}", headers=auth_headers)
+        assert reread.status_code == 200
+
+    @pytest.mark.parametrize(
+        "field",
+        ["url", "check_interval_seconds", "timeout_seconds", "retry_count"],
+    )
+    def test_patch_monitor_rejects_null(
+        self, client, auth_headers, session_factory, registered_user, field
+    ):
+        monitor = create_monitor(
+            user_id=registered_user["id"],
+            url="https://original.example.com",
+            check_interval=timedelta(seconds=10),
+            timeout=20,
+            retry_count=3,
+        )
+        with session_factory() as session:
+            repo = SQLAlchemyMonitorRepository(session)
+            saved_monitor = repo.add_monitor(monitor)
+            session.commit()
+
+        response = client.patch(
+            f"/monitors/{saved_monitor.id}",
+            json={field: None},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 422
+        reread = client.get(f"/monitors/{saved_monitor.id}", headers=auth_headers)
+        assert reread.json() == {
+            "id": saved_monitor.id,
+            "url": "https://original.example.com",
+            "check_interval_seconds": 10,
+            "timeout_seconds": 20,
+            "retry_count": 3,
+            "last_checked_at": None,
+        }
+
+    def test_patch_monitor_rejects_invalid_value(
+        self, client, auth_headers, session_factory, registered_user
+    ):
+        monitor = create_monitor(
+            user_id=registered_user["id"],
+            check_interval=timedelta(seconds=10),
+            timeout=20,
+        )
+        with session_factory() as session:
+            repo = SQLAlchemyMonitorRepository(session)
+            saved_monitor = repo.add_monitor(monitor)
+            session.commit()
+
+        response = client.patch(
+            f"/monitors/{saved_monitor.id}",
+            json={"timeout_seconds": 0},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 422
+        reread = client.get(f"/monitors/{saved_monitor.id}", headers=auth_headers)
+        assert reread.json()["timeout_seconds"] == 20
+
+    def test_patch_monitor_another_user_returns_404(
+        self, client, auth_headers, session_factory, make_user
+    ):
+        another_monitor = create_monitor(
+            user_id=make_user(),
+            url="https://other-user.example.com",
+            check_interval=timedelta(seconds=10),
+        )
+        with session_factory() as session:
+            repo = SQLAlchemyMonitorRepository(session)
+            saved_monitor = repo.add_monitor(another_monitor)
+            session.commit()
+
+        response = client.patch(
+            f"/monitors/{saved_monitor.id}",
+            json={"url": "https://hijacked.example.com"},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 404
+        assert response.json() == {
+            "detail": f"Monitor with id {saved_monitor.id} not found"
+        }
+        with session_factory() as session:
+            repo = SQLAlchemyMonitorRepository(session)
+            assert (
+                repo.get_monitor(saved_monitor.id).url
+                == "https://other-user.example.com"
+            )
+
+    def test_patch_monitor_returns_401_without_authentication(self, client):
+        response = client.patch("/monitors/4", json={"url": "https://x.example.com"})
+
+        assert response.status_code == 401
+        assert response.json() == {"detail": "Not authenticated"}
