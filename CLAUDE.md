@@ -408,7 +408,16 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
     fetches each by id (a route ignoring `{id}` can't pass); expected values are literals, never
     recomputed with production conversions (`int(...total_seconds())` would copy a bug). Unknown
     id = `saved.id + 1`. The 401 test needs no monitor — auth runs before the lookup.
-- Next: `PATCH /monitors/{id}` and `DELETE /monitors/{id}`, both via `get_current_user_monitor`,
-  each with the other-user 404 test. PATCH goes through `Monitor.with_changes` /
-  `update_monitor` (unknown keys → `InvalidMonitorUpdate`, needs a status mapping) and the API
-  speaks seconds, so the update schema must convert. Then the dashboard.
+  - `PATCH /monitors/{id}` → `MonitorRead`, via `get_current_user_monitor` + the repository's
+    `update_monitor` (returns the *updated* monitor — never answer with `current_monitor`, that's
+    the pre-update copy). `MonitorUpdate`: all four fields optional, `extra="forbid"` (e.g.
+    `user_id` → 422), and a `field_validator` rejecting explicit `null` → 422 (validators don't
+    run on defaults, so it only fires for values the client actually sent). The route uses
+    `model_dump(exclude_unset=True)`, then `_to_domain_changes` translates **only present keys**
+    to domain names (`timeout_seconds` → `timeout`, `check_interval_seconds` →
+    `check_interval` timedelta).
+  - PATCH tests re-read via `GET` after the PATCH — a route that answers correctly but never
+    calls `update_monitor` goes red there. Partial test sends one field and expects the other
+    explicit starting values unchanged.
+- Next: `DELETE /monitors/{id}` via `get_current_user_monitor` (204; other user → 404; then
+  a GET → 404 proves it's gone). Then the dashboard.
