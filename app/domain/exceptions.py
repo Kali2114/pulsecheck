@@ -1,5 +1,7 @@
 class MonitorNotFound(Exception):
-    """Raised when a monitor is not found"""
+    def __init__(self, monitor_id: int) -> None:
+        self.monitor_id = monitor_id
+        super().__init__(f"Monitor with id {monitor_id} not found")
 
 
 class InvalidRetryCount(ValueError):

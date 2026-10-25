@@ -61,7 +61,7 @@ class SQLAlchemyMonitorRepository:
     def _get_model_or_raise(self, monitor_id: int) -> MonitorModel:
         model = self.session.get(MonitorModel, monitor_id)
         if model is None:
-            raise MonitorNotFound(f"Monitor {monitor_id} not found")
+            raise MonitorNotFound(monitor_id)
         return model
 
     @staticmethod

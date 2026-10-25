@@ -34,7 +34,7 @@ class InMemoryMonitorRepository:
         try:
             return self.monitors[monitor_id]
         except KeyError:
-            raise MonitorNotFound(f"Monitor with id {monitor_id} not found.") from None
+            raise MonitorNotFound(monitor_id) from None
 
     def get_monitor(self, monitor_id: int) -> Monitor:
         return self._get_or_raise(monitor_id)

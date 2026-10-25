@@ -1,3 +1,5 @@
+import re
+
 import pytest
 
 from app.domain.exceptions import (
@@ -36,7 +38,9 @@ class TestMonitorRepository:
         assert added_monitor is received_monitor
 
     def test_get_monitor_not_found(self):
-        with pytest.raises(MonitorNotFound):
+        with pytest.raises(
+            MonitorNotFound, match=re.escape("Monitor with id 99 not found") + "$"
+        ):
             self.repository.get_monitor(99)
 
     def test_list_user_monitor(self):

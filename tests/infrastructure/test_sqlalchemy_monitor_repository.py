@@ -1,3 +1,4 @@
+import re
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -42,7 +43,9 @@ class TestSQLAlchemyMonitorRepository:
         assert received.retry_count == self.monitor.retry_count
 
     def test_get_monitor_raises_for_unknown_id(self):
-        with pytest.raises(MonitorNotFound):
+        with pytest.raises(
+            MonitorNotFound, match=re.escape("Monitor with id 99 not found") + "$"
+        ):
             self.repository.get_monitor(99)
 
     def test_get_monitor_preserves_utc_last_checked_at(self):

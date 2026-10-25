@@ -99,3 +99,90 @@ class TestMonitors:
 
         assert response.status_code == 401
         assert response.json() == {"detail": "Not authenticated"}
+
+    def test_get_monitor_returns_own_monitor(
+        self, client, auth_headers, session_factory, registered_user
+    ):
+        monitor1 = create_monitor(
+            user_id=registered_user["id"],
+            url="https://first.example.com",
+            check_interval=timedelta(seconds=10),
+            retry_count=5,
+            timeout=20,
+        )
+
+        monitor2 = create_monitor(
+            user_id=registered_user["id"],
+            url="https://second.example.com",
+            check_interval=timedelta(seconds=15),
+            retry_count=7,
+            timeout=30,
+        )
+        with session_factory() as session:
+            repo = SQLAlchemyMonitorRepository(session)
+            saved_monitor1 = repo.add_monitor(monitor1)
+            saved_monitor2 = repo.add_monitor(monitor2)
+            session.commit()
+
+        response1 = client.get(f"/monitors/{saved_monitor1.id}", headers=auth_headers)
+        response2 = client.get(f"/monitors/{saved_monitor2.id}", headers=auth_headers)
+        data1 = response1.json()
+        data2 = response2.json()
+
+        assert response1.status_code == 200
+        assert response2.status_code == 200
+        assert data1["id"] == saved_monitor1.id
+        assert data1["url"] == "https://first.example.com"
+        assert data1["last_checked_at"] is None
+        assert data1["retry_count"] == 5
+        assert data1["check_interval_seconds"] == 10
+        assert data1["timeout_seconds"] == 20
+        assert data2["id"] == saved_monitor2.id
+        assert data2["url"] == "https://second.example.com"
+        assert data2["last_checked_at"] is None
+        assert data2["retry_count"] == 7
+        assert data2["check_interval_seconds"] == 15
+        assert data2["timeout_seconds"] == 30
+
+    def test_get_monitor_unknown_id_returns_404(
+        self, client, auth_headers, session_factory, registered_user
+    ):
+        monitor = create_monitor(
+            user_id=registered_user["id"],
+            check_interval=timedelta(seconds=10),
+        )
+        with session_factory() as session:
+            repo = SQLAlchemyMonitorRepository(session)
+            saved_monitor = repo.add_monitor(monitor)
+            session.commit()
+        unknown_id = saved_monitor.id + 1
+        response = client.get(f"/monitors/{unknown_id}", headers=auth_headers)
+
+        assert response.status_code == 404
+        assert response.json() == {"detail": f"Monitor with id {unknown_id} not found"}
+
+    def test_get_monitor_another_user_returns_404(
+        self, client, auth_headers, session_factory, make_user
+    ):
+        another_user_id = make_user()
+        another_monitor = create_monitor(
+            user_id=another_user_id,
+            check_interval=timedelta(seconds=10),
+        )
+        with session_factory() as session:
+            repo = SQLAlchemyMonitorRepository(session)
+            saved_monitor = repo.add_monitor(another_monitor)
+            session.commit()
+
+        response = client.get(f"/monitors/{saved_monitor.id}", headers=auth_headers)
+
+        assert response.status_code == 404
+        assert response.json() == {
+            "detail": f"Monitor with id {saved_monitor.id} not found"
+        }
+
+    def test_get_monitor_returns_401_without_authentication(self, client):
+        response = client.get("/monitors/4")
+
+        assert response.status_code == 401
+        assert response.json() == {"detail": "Not authenticated"}

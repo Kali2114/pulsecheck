@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import settings
 from app.domain.auth_service import AuthService
-from app.domain.exceptions import InvalidToken, UserNotFound
+from app.domain.exceptions import InvalidToken, MonitorNotFound, UserNotFound
+from app.domain.monitor import Monitor
 from app.domain.monitor_repository import MonitorRepository
 from app.domain.password_hasher import PasswordHasher
 from app.domain.user import User
@@ -87,3 +88,14 @@ def get_monitor_repository(
     db: Session = Depends(get_db),
 ) -> MonitorRepository:
     return SQLAlchemyMonitorRepository(db)
+
+
+def get_current_user_monitor(
+    monitor_id: int,
+    current_user: User = Depends(get_current_user),
+    monitor_repository: MonitorRepository = Depends(get_monitor_repository),
+) -> Monitor:
+    received_monitor = monitor_repository.get_monitor(monitor_id)
+    if received_monitor.user_id != current_user.id:
+        raise MonitorNotFound(monitor_id)
+    return received_monitor

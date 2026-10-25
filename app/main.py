@@ -10,6 +10,7 @@ from app.domain.exceptions import (
     EmailAlreadyRegistered,
     InvalidCredentials,
     InvalidToken,
+    MonitorNotFound,
     PasswordTooLong,
 )
 from app.infrastructure.scheduler_runner import (
@@ -75,4 +76,15 @@ def invalid_token_handler(
         status_code=status.HTTP_401_UNAUTHORIZED,
         content={"detail": str(exc)},
         headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+@app.exception_handler(MonitorNotFound)
+def monitor_not_found_handler(
+    _request: Request,
+    exc: MonitorNotFound,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_404_NOT_FOUND,
+        content={"detail": str(exc)},
     )

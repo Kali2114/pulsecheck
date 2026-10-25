@@ -3,7 +3,11 @@ from datetime import timedelta
 from fastapi import APIRouter, Depends
 from starlette import status
 
-from app.api.dependencies import get_current_user, get_monitor_repository
+from app.api.dependencies import (
+    get_current_user,
+    get_current_user_monitor,
+    get_monitor_repository,
+)
 from app.api.schemas import MonitorCreate, MonitorRead
 from app.domain.monitor import Monitor
 from app.domain.monitor_repository import MonitorRepository
@@ -35,6 +39,13 @@ def list_monitors(
 ) -> list[MonitorRead]:
     monitors = monitor_repository.list_user_monitors(current_user.id)
     return [_to_monitor_read(m) for m in monitors]
+
+
+@monitors_router.get("/{monitor_id}", response_model=MonitorRead)
+def get_monitor(
+    current_monitor: Monitor = Depends(get_current_user_monitor),
+) -> MonitorRead:
+    return _to_monitor_read(current_monitor)
 
 
 def _to_domain_monitor(
