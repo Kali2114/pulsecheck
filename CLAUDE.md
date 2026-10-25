@@ -94,7 +94,7 @@ cost. Fly.io has no free tier as of late 2024; Render's free tier blocks outboun
 has no persistent disk on the free plan — neither is a good fit for this app's notification/DB
 needs even at demo scale, which is part of why AWS was chosen over them this time.
 
-## Current status (2026-10-23)
+## Current status (2026-10-25)
 
 **Domain layer for v1 is done** (`app/domain/`, 100% test coverage, all pushed to `main`):
 - `Monitor` — `is_due(now)`: due from `last_checked_at + check_interval - DUE_TOLERANCE`
@@ -393,6 +393,22 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
     ids *returned* by `add_monitor`.
   - Gotcha: Postgres container stopped after a reboot → every DB test errors with "connection
     refused" on 5434. `docker compose up -d` before pytest.
-- Next: `GET/PATCH/DELETE /monitors/{id}`. Another user's monitor → **404, not 403** (don't
-  reveal it exists) — decide how the domain's "monitor not found" maps to 404 and make a
-  foreign monitor take the same path. Then the dashboard.
+  - `GET /monitors/{id}` → `MonitorRead`. Ownership lives in **one** dependency,
+    `get_current_user_monitor(monitor_id, current_user, monitor_repository)`
+    (`app/api/dependencies.py`): loads via `get_monitor` and raises `MonitorNotFound(monitor_id)`
+    when the owner differs — so a foreign monitor gets the **identical** 404 as a missing id
+    (never 403, never a different message). PATCH/DELETE must declare the same dependency.
+  - `MonitorNotFound(monitor_id)` builds its own message (`"Monitor with id N not found"`, no full
+    stop), like `EmailAlreadyRegistered`; both repositories just pass the id. Handler in
+    `main.py` → 404 `{"detail": str(exc)}` (no `WWW-Authenticate` — that header is for 401s).
+    Repository tests pin the message with `match=re.escape(...)`.
+  - 404 test trap: FastAPI answers an unknown *route* with 404 `{"detail": "Not Found"}`, so a
+    status-only 404 test passes before the route exists. Always pin the `detail`.
+  - Single-monitor GET test seeds **two** monitors with different values in every field and
+    fetches each by id (a route ignoring `{id}` can't pass); expected values are literals, never
+    recomputed with production conversions (`int(...total_seconds())` would copy a bug). Unknown
+    id = `saved.id + 1`. The 401 test needs no monitor — auth runs before the lookup.
+- Next: `PATCH /monitors/{id}` and `DELETE /monitors/{id}`, both via `get_current_user_monitor`,
+  each with the other-user 404 test. PATCH goes through `Monitor.with_changes` /
+  `update_monitor` (unknown keys → `InvalidMonitorUpdate`, needs a status mapping) and the API
+  speaks seconds, so the update schema must convert. Then the dashboard.
