@@ -94,7 +94,7 @@ cost. Fly.io has no free tier as of late 2024; Render's free tier blocks outboun
 has no persistent disk on the free plan — neither is a good fit for this app's notification/DB
 needs even at demo scale, which is part of why AWS was chosen over them this time.
 
-## Current status (2026-10-25)
+## Current status (2026-10-26)
 
 **Domain layer for v1 is done** (`app/domain/`, 100% test coverage, all pushed to `main`):
 - `Monitor` — `is_due(now)`: due from `last_checked_at + check_interval - DUE_TOLERANCE`
@@ -419,5 +419,14 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
   - PATCH tests re-read via `GET` after the PATCH — a route that answers correctly but never
     calls `update_monitor` goes red there. Partial test sends one field and expects the other
     explicit starting values unchanged.
-- Next: `DELETE /monitors/{id}` via `get_current_user_monitor` (204; other user → 404; then
-  a GET → 404 proves it's gone). Then the dashboard.
+  - `DELETE /monitors/{id}` → 204, no `response_model` (FastAPI would try to validate `None`),
+    `-> None`; via `get_current_user_monitor` + `delete_monitor`. Tests: fresh session proves
+    it's gone, `response.content == b""`; other-user and no-token tests check the monitor
+    **survived** (for DELETE, a foreign monitor vanishing is the real bug, not the status).
+  - **Monitor CRUD is done** — all five routes scoped to the current user, one identical 404 for
+    "doesn't exist" and "not yours". Open: no test proves `check_results` go with a deleted
+    monitor (`ON DELETE CASCADE`); a repository-level test would pin it.
+- Next: the dashboard (last v1 item) — monitor list with current status and a response-time
+  history chart. Needs read endpoints for check results / stats first (`statistics.py` has
+  `uptime_percentage` and `average_response_time`), then the no-framework frontend (Claude
+  builds frontend, the user directs).
