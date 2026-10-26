@@ -2,6 +2,7 @@ from datetime import timedelta
 
 import pytest
 
+from app.domain.exceptions import MonitorNotFound
 from app.infrastructure.monitor_repository import SQLAlchemyMonitorRepository
 from tests.domain.utils import create_monitor
 
@@ -374,3 +375,70 @@ class TestMonitors:
 
         assert response.status_code == 401
         assert response.json() == {"detail": "Not authenticated"}
+
+    def test_delete_monitor(
+        self, client, auth_headers, registered_user, session_factory
+    ):
+        monitor = create_monitor(
+            user_id=registered_user["id"],
+            url="https://original.example.com",
+            check_interval=timedelta(seconds=10),
+        )
+
+        with session_factory() as session:
+            repo = SQLAlchemyMonitorRepository(session)
+            saved_monitor = repo.add_monitor(monitor)
+            session.commit()
+
+        response = client.delete(f"/monitors/{saved_monitor.id}", headers=auth_headers)
+
+        assert response.status_code == 204
+        assert response.content == b""
+        with session_factory() as session:
+            repo = SQLAlchemyMonitorRepository(session)
+            with pytest.raises(MonitorNotFound):
+                repo.get_monitor(saved_monitor.id)
+
+    def test_delete_monitor_another_user_returns_404(
+        self, client, auth_headers, session_factory, make_user
+    ):
+        another_monitor = create_monitor(
+            user_id=make_user(),
+            check_interval=timedelta(seconds=10),
+        )
+        with session_factory() as session:
+            repo = SQLAlchemyMonitorRepository(session)
+            saved_monitor = repo.add_monitor(another_monitor)
+            session.commit()
+
+        response = client.delete(f"/monitors/{saved_monitor.id}", headers=auth_headers)
+
+        assert response.status_code == 404
+        assert response.json() == {
+            "detail": f"Monitor with id {saved_monitor.id} not found"
+        }
+
+        with session_factory() as session:
+            repo = SQLAlchemyMonitorRepository(session)
+            repo.get_monitor(saved_monitor.id)
+
+    def test_delete_monitor_returns_401_without_authentication(
+        self, client, session_factory, registered_user
+    ):
+        monitor = create_monitor(
+            user_id=registered_user["id"],
+            check_interval=timedelta(seconds=10),
+        )
+        with session_factory() as session:
+            repo = SQLAlchemyMonitorRepository(session)
+            saved_monitor = repo.add_monitor(monitor)
+            session.commit()
+
+        response = client.delete(f"/monitors/{saved_monitor.id}")
+
+        assert response.status_code == 401
+        assert response.json() == {"detail": "Not authenticated"}
+
+        with session_factory() as session:
+            repo = SQLAlchemyMonitorRepository(session)
+            repo.get_monitor(saved_monitor.id)

@@ -60,6 +60,15 @@ def update_monitor(
     return _to_monitor_read(updated_monitor)
 
 
+@monitors_router.delete("/{monitor_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_monitor(
+    current_monitor: Monitor = Depends(get_current_user_monitor),
+    repository: MonitorRepository = Depends(get_monitor_repository),
+) -> None:
+    repository.delete_monitor(current_monitor.id)
+    return None
+
+
 def _to_domain_monitor(
     payload: MonitorCreate,
     user_id: int,
