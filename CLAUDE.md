@@ -424,8 +424,22 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
     it's gone, `response.content == b""`; other-user and no-token tests check the monitor
     **survived** (for DELETE, a foreign monitor vanishing is the real bug, not the status).
   - **Monitor CRUD is done** — all five routes scoped to the current user, one identical 404 for
-    "doesn't exist" and "not yours". Open: no test proves `check_results` go with a deleted
-    monitor (`ON DELETE CASCADE`); a repository-level test would pin it.
+    "doesn't exist" and "not yours".
+  - Cascade pinned (2026-11-03): two tests in `test_sqlalchemy_monitor_repository.py` — a
+    deleted monitor's check results go (precondition asserts they existed first), another
+    monitor's results survive. The cascade is Postgres's FK (`ON DELETE CASCADE`), not an ORM
+    `relationship()` — SQLAlchemy never sees the child rows. The FK has no explicit name
+    (Postgres calls it `check_results_monitor_id_fkey`) — against the "name every constraint"
+    lesson; fix if it's ever touched.
+- **Mutation-checking a schema rule** (first done here): the test DB is built from the
+  **migrations** (`migrated_database` runs `upgrade head`), not from `models.py` — so mutate
+  the migration. Editing it alone does nothing: the test DB is already at head, so Alembic
+  skips it and tests stay green for the wrong reason. Wipe the test DB so the fixture rebuilds
+  it (one line — a split command leaves the shell at a `>` prompt and never runs):
+  `docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_TEST_DB" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"'`
+  — **test** DB only, never `POSTGRES_DB`. Expected red here: `ForeignKeyViolation` at
+  `delete_monitor` (without a cascade Postgres refuses the delete). Then revert the migration,
+  wipe again, run the full suite.
 - Next: the dashboard (last v1 item) — monitor list with current status and a response-time
   history chart. Needs read endpoints for check results / stats first (`statistics.py` has
   `uptime_percentage` and `average_response_time`), then the no-framework frontend (Claude
