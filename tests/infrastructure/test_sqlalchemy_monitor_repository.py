@@ -10,8 +10,9 @@ from app.domain.exceptions import (
 )
 from app.domain.monitor import Monitor
 from app.domain.monitor_repository import MonitorRepository
+from app.infrastructure.check_result_repository import SQLAlchemyCheckResultRepository
 from app.infrastructure.monitor_repository import SQLAlchemyMonitorRepository
-from tests.domain.utils import create_monitor
+from tests.domain.utils import create_check_result, create_monitor
 
 
 class TestSQLAlchemyMonitorRepository:
@@ -22,6 +23,7 @@ class TestSQLAlchemyMonitorRepository:
         self.user_id = make_user()
         self.monitor = create_monitor(user_id=self.user_id)
         self.repository = SQLAlchemyMonitorRepository(db_session)
+        self.check_result_repository = SQLAlchemyCheckResultRepository(db_session)
 
     def test_add_monitor_assigns_id(self):
         self.repository.add_monitor(self.monitor)
@@ -174,6 +176,33 @@ class TestSQLAlchemyMonitorRepository:
     def test_delete_monitor_raises_for_unknown_id(self):
         with pytest.raises(MonitorNotFound):
             self.repository.delete_monitor(99)
+
+    def test_delete_monitor_cascades_check_results(self):
+        monitor = self.repository.add_monitor(self.monitor)
+        check_result = create_check_result(monitor_id=monitor.id)
+        self.check_result_repository.add_check_result(check_result)
+        results = self.check_result_repository.list_for_monitor(monitor.id)
+        assert len(results) == 1
+        assert results[0].monitor_id == monitor.id
+        self.repository.delete_monitor(monitor.id)
+        self.db_session.expire_all()
+
+        assert self.check_result_repository.list_for_monitor(monitor.id) == []
+
+    def test_delete_monitor_keeps_other_monitor_check_results(self):
+        monitor1 = self.repository.add_monitor(self.monitor)
+        monitor2 = self.repository.add_monitor(create_monitor(user_id=self.user_id))
+        check_result1 = create_check_result(monitor_id=monitor1.id)
+        check_result2 = create_check_result(monitor_id=monitor2.id)
+        self.check_result_repository.add_check_result(check_result1)
+        self.check_result_repository.add_check_result(check_result2)
+        self.repository.delete_monitor(monitor1.id)
+        self.db_session.expire_all()
+
+        assert self.check_result_repository.list_for_monitor(monitor1.id) == []
+        results = self.check_result_repository.list_for_monitor(monitor2.id)
+        assert len(results) == 1
+        assert results[0].monitor_id == monitor2.id
 
     def test_sqlalchemy_repository_satisfies_monitor_repository_protocol(self):
         assert isinstance(self.repository, MonitorRepository)
