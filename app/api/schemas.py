@@ -56,3 +56,11 @@ class MonitorUpdate(BaseModel):
         if value is None:
             raise ValueError("field cannot be null")
         return value
+
+
+class CheckResultRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    checked_at: datetime
+    is_up: bool
+    response_time_ms: int | None

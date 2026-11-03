@@ -4,11 +4,14 @@ from fastapi import APIRouter, Depends
 from starlette import status
 
 from app.api.dependencies import (
+    get_check_result_repository,
     get_current_user,
     get_current_user_monitor,
     get_monitor_repository,
 )
-from app.api.schemas import MonitorCreate, MonitorRead, MonitorUpdate
+from app.api.schemas import CheckResultRead, MonitorCreate, MonitorRead, MonitorUpdate
+from app.domain.check_result import CheckResult
+from app.domain.check_result_repository import CheckResultRepository
 from app.domain.monitor import Monitor
 from app.domain.monitor_repository import MonitorRepository
 from app.domain.user import User
@@ -67,6 +70,20 @@ def delete_monitor(
 ) -> None:
     repository.delete_monitor(current_monitor.id)
     return None
+
+
+@monitors_router.get(
+    "/{monitor_id}/check-results", response_model=list[CheckResultRead]
+)
+def list_check_results(
+    current_monitor: Monitor = Depends(get_current_user_monitor),
+    check_result_repository: CheckResultRepository = Depends(
+        get_check_result_repository
+    ),
+) -> list[CheckResult]:
+    results = check_result_repository.list_for_monitor(current_monitor.id)
+
+    return results
 
 
 def _to_domain_monitor(
