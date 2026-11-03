@@ -440,7 +440,31 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
   — **test** DB only, never `POSTGRES_DB`. Expected red here: `ForeignKeyViolation` at
   `delete_monitor` (without a cascade Postgres refuses the delete). Then revert the migration,
   wipe again, run the full suite.
-- Next: the dashboard (last v1 item) — monitor list with current status and a response-time
-  history chart. Needs read endpoints for check results / stats first (`statistics.py` has
-  `uptime_percentage` and `average_response_time`), then the no-framework frontend (Claude
+- **Dashboard, in progress** (the last v1 item) — monitor list with current status and a
+  response-time history chart. Read endpoints first, then the no-framework frontend (Claude
   builds frontend, the user directs).
+  - `GET /monitors/{id}/check-results` (2026-11-03, in `monitors_router`) → `list[CheckResultRead]`
+    (`checked_at`, `is_up`, `response_time_ms` — `null` when no response; no `monitor_id`, it's
+    in the URL; `CheckResult` has no id and the API doesn't invent one). Nested so
+    `get_current_user_monitor` gives ownership + the identical 404 for free. Repository via
+    `get_check_result_repository(db)`. The route returns the domain `CheckResult`s directly and
+    `response_model` shapes them — FastAPI validates responses with `from_attributes=True`
+    itself (`fastapi/_compat/v2.py`), so the schema's `from_attributes` isn't required for
+    responses (kept for consistency with `UserRead`). Datetimes serialise as `"...Z"`.
+  - Tests (`tests/api/test_check_results.py`): class helpers `add_monitor` / `add_check_results`
+    seed via the repositories on `session_factory`; results seeded newest-first to pin
+    oldest-first order; a second monitor's result must not appear; foreign + unknown id → exact
+    404 detail; no token → 401. Seeded `checked_at`s sit inside the hour before the `now`
+    fixture (2026-10-14 12:00 UTC) so the coming default window doesn't break them.
+  - **Next: the `since` window (decided):** query param `since`, optional, **default 1h** before
+    `get_now()`; **cap 7 days** as a named constant — older → **422** (not clamped; loosening a
+    cap later is safe, tightening breaks clients, and raw rows are ~60k/week at a 10s interval);
+    **naive datetimes → 422** (Pydantic's aware-only datetime type); **future → 200 `[]`**
+    (pin it anyway). The cap depends on "now", so it can't live in a Pydantic validator (no
+    injected clock) — it belongs where both `since` and `get_now()` are available. URL gotcha:
+    an unencoded `+01:00` arrives as a space; `Z` avoids it (`TestClient(params=...)` encodes).
+    Tests to write: inside/outside the default hour, exactly 7 days ok / 1s older 422 (pin
+    `detail`), naive 422, future `[]`.
+  - Then: the stats endpoint (uptime % / average response time from `statistics.py`) with the
+    **same** `since` semantics, so chart and numbers describe the same window. Bucketing raw
+    points (`date_trunc`) is deferred until the cap needs to grow.
