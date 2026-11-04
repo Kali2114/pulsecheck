@@ -139,3 +139,126 @@ class TestCheckResults:
 
         assert response.status_code == 401
         assert response.json() == {"detail": "Not authenticated"}
+
+    def test_get_check_results_returns_only_results_since_given_time(
+        self, client, registered_user, auth_headers, now
+    ):
+        monitor = self.add_monitor(registered_user["id"])
+        self.add_check_results(
+            create_check_result(
+                monitor_id=monitor.id,
+                checked_at=now - timedelta(hours=3),
+            ),
+            create_check_result(
+                monitor_id=monitor.id,
+                checked_at=now - timedelta(hours=1, minutes=30),
+            ),
+        )
+        since = now - timedelta(hours=2)
+        response = client.get(
+            f"/monitors/{monitor.id}/check-results",
+            headers=auth_headers,
+            params={"since": since.isoformat()},
+        )
+        data = response.json()
+
+        assert response.status_code == 200
+        assert len(data) == 1
+        assert data[0]["checked_at"] == "2026-10-14T10:30:00Z"
+
+    def test_without_since_returns_only_last_hour(
+        self, client, registered_user, auth_headers, now
+    ):
+        monitor = self.add_monitor(registered_user["id"])
+        self.add_check_results(
+            create_check_result(
+                monitor_id=monitor.id,
+                checked_at=now - timedelta(hours=1, seconds=1),
+            ),
+            create_check_result(
+                monitor_id=monitor.id,
+                checked_at=now - timedelta(hours=1),
+            ),
+        )
+
+        response = client.get(
+            f"/monitors/{monitor.id}/check-results", headers=auth_headers
+        )
+
+        assert response.status_code == 200
+        assert [item["checked_at"] for item in response.json()] == [
+            "2026-10-14T11:00:00Z"
+        ]
+
+    def test_since_exactly_seven_days_ago_is_accepted(
+        self, client, registered_user, auth_headers, now
+    ):
+        monitor = self.add_monitor(registered_user["id"])
+        self.add_check_results(
+            create_check_result(
+                monitor_id=monitor.id,
+                checked_at=now - timedelta(days=7),
+            )
+        )
+        since = now - timedelta(days=7)
+
+        response = client.get(
+            f"/monitors/{monitor.id}/check-results",
+            headers=auth_headers,
+            params={"since": since.isoformat()},
+        )
+
+        assert response.status_code == 200
+        assert [item["checked_at"] for item in response.json()] == [
+            "2026-10-07T12:00:00Z"
+        ]
+
+    def test_since_older_than_seven_days_returns_422(
+        self, client, registered_user, auth_headers, now
+    ):
+        monitor = self.add_monitor(registered_user["id"])
+        since = now - timedelta(days=7, seconds=1)
+
+        response = client.get(
+            f"/monitors/{monitor.id}/check-results",
+            headers=auth_headers,
+            params={"since": since.isoformat()},
+        )
+
+        assert response.status_code == 422
+        assert response.json() == {"detail": "since must be at most 7 days ago"}
+
+    def test_naive_since_returns_422(self, client, registered_user, auth_headers):
+        monitor = self.add_monitor(registered_user["id"])
+
+        response = client.get(
+            f"/monitors/{monitor.id}/check-results",
+            headers=auth_headers,
+            params={"since": "2026-10-14T10:00:00"},
+        )
+
+        assert response.status_code == 422
+        assert [error["loc"] for error in response.json()["detail"]] == [
+            ["query", "since"]
+        ]
+
+    def test_future_since_returns_empty_list(
+        self, client, registered_user, auth_headers, now
+    ):
+        monitor = self.add_monitor(registered_user["id"])
+        self.add_check_results(
+            create_check_result(
+                monitor_id=monitor.id,
+                checked_at=now - timedelta(minutes=10),
+            )
+        )
+        since = now + timedelta(hours=1)
+
+        response = client.get(
+            f"/monitors/{monitor.id}/check-results",
+            headers=auth_headers,
+            params={"since": since.isoformat()},
+        )
+
+        assert response.status_code == 200
+        assert response.json() == []

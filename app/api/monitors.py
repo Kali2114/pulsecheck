@@ -1,13 +1,14 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends
-from starlette import status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import AwareDatetime
 
 from app.api.dependencies import (
     get_check_result_repository,
     get_current_user,
     get_current_user_monitor,
     get_monitor_repository,
+    get_now,
 )
 from app.api.schemas import CheckResultRead, MonitorCreate, MonitorRead, MonitorUpdate
 from app.domain.check_result import CheckResult
@@ -20,6 +21,10 @@ monitors_router = APIRouter(
     prefix="/monitors",
     tags=["monitors"],
 )
+
+
+CHECK_RESULTS_DEFAULT_WINDOW = timedelta(hours=1)
+CHECK_RESULTS_MAX_AGE = timedelta(days=7)
 
 
 @monitors_router.post(
@@ -80,8 +85,19 @@ def list_check_results(
     check_result_repository: CheckResultRepository = Depends(
         get_check_result_repository
     ),
+    now: datetime = Depends(get_now),
+    since: AwareDatetime | None = Query(default=None),
 ) -> list[CheckResult]:
-    results = check_result_repository.list_for_monitor(current_monitor.id)
+    effective_since = since or (now - CHECK_RESULTS_DEFAULT_WINDOW)
+    oldest_allowed = now - CHECK_RESULTS_MAX_AGE
+    if effective_since < oldest_allowed:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"since must be at most {CHECK_RESULTS_MAX_AGE.days} days ago",
+        )
+    results = check_result_repository.list_for_monitor(
+        current_monitor.id, since=effective_since
+    )
 
     return results
 
