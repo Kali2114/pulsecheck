@@ -456,15 +456,29 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
     oldest-first order; a second monitor's result must not appear; foreign + unknown id → exact
     404 detail; no token → 401. Seeded `checked_at`s sit inside the hour before the `now`
     fixture (2026-10-14 12:00 UTC) so the coming default window doesn't break them.
-  - **Next: the `since` window (decided):** query param `since`, optional, **default 1h** before
-    `get_now()`; **cap 7 days** as a named constant — older → **422** (not clamped; loosening a
-    cap later is safe, tightening breaks clients, and raw rows are ~60k/week at a 10s interval);
-    **naive datetimes → 422** (Pydantic's aware-only datetime type); **future → 200 `[]`**
-    (pin it anyway). The cap depends on "now", so it can't live in a Pydantic validator (no
-    injected clock) — it belongs where both `since` and `get_now()` are available. URL gotcha:
-    an unencoded `+01:00` arrives as a space; `Z` avoids it (`TestClient(params=...)` encodes).
-    Tests to write: inside/outside the default hour, exactly 7 days ok / 1s older 422 (pin
-    `detail`), naive 422, future `[]`.
-  - Then: the stats endpoint (uptime % / average response time from `statistics.py`) with the
+  - **`since` window — done** (2026-11-04, pushed): optional query param
+    `since: AwareDatetime | None`; **default** `CHECK_RESULTS_DEFAULT_WINDOW = timedelta(hours=1)`
+    before `get_now()`; **cap** `CHECK_RESULTS_MAX_AGE = timedelta(days=7)` — older → 422
+    `HTTPException`, `detail` `"since must be at most 7 days ago"` (built from `.days`). Not
+    clamped: loosening a cap later is safe, tightening breaks clients; raw rows are ~60k/week
+    at a 10s interval. Both constants live at the top of `app/api/monitors.py` — move them
+    somewhere shared when the stats endpoint needs them, don't copy. Constants are `timedelta`s
+    named by meaning (window / max age), not unit (`_HOURS` lied once it held a duration).
+    **Naive → 422** comes from `AwareDatetime` before the route runs — with plain `datetime` a
+    naive value crashed the cap comparison (`TypeError` → 500). The cap needs "now", so it's in
+    the route, not a Pydantic validator (no injected clock). **Future → 200 `[]`** (the
+    repository's `>=` does it; pinned). Route still uses `since or ...` (works, datetimes are
+    never falsy; an explicit `is None` would say "not sent" more precisely).
+    URL gotcha: an unencoded `+01:00` arrives as a space; `Z` avoids it
+    (`TestClient(params=...)` encodes).
+  - `since` tests: each sits one second from an edge on one side and exactly on it on the other
+    (default hour: `now - 1h` kept, 1s older dropped; cap: exactly 7 days ok, 1s older 422).
+    The custom-`since` test puts `since` well outside the default hour and the surviving result
+    *between* `since` and `now - 1h` — so "ignores `since`" and "uses the default instead" both
+    go red (a survivor at exactly `now - 1h` passed the broken "always default" route). Naive
+    test pins only the error `loc` (`["query", "since"]`), not Pydantic's message.
+    Lesson: implementing the default before its test gave 100% coverage with the window
+    untested (`hours=100` stayed green) — write the test for each rule you add.
+  - Next: the stats endpoint (uptime % / average response time from `statistics.py`) with the
     **same** `since` semantics, so chart and numbers describe the same window. Bucketing raw
     points (`date_trunc`) is deferred until the cap needs to grow.
