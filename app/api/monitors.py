@@ -1,30 +1,32 @@
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import AwareDatetime
+from fastapi import APIRouter, Depends, status
 
 from app.api.dependencies import (
     get_check_result_repository,
+    get_check_results_since,
     get_current_user,
     get_current_user_monitor,
     get_monitor_repository,
-    get_now,
 )
-from app.api.schemas import CheckResultRead, MonitorCreate, MonitorRead, MonitorUpdate
+from app.api.schemas import (
+    CheckResultRead,
+    MonitorCreate,
+    MonitorRead,
+    MonitorStatsRead,
+    MonitorUpdate,
+)
 from app.domain.check_result import CheckResult
 from app.domain.check_result_repository import CheckResultRepository
 from app.domain.monitor import Monitor
 from app.domain.monitor_repository import MonitorRepository
+from app.domain.statistics import average_response_time, uptime_percentage
 from app.domain.user import User
 
 monitors_router = APIRouter(
     prefix="/monitors",
     tags=["monitors"],
 )
-
-
-CHECK_RESULTS_DEFAULT_WINDOW = timedelta(hours=1)
-CHECK_RESULTS_MAX_AGE = timedelta(days=7)
 
 
 @monitors_router.post(
@@ -85,21 +87,27 @@ def list_check_results(
     check_result_repository: CheckResultRepository = Depends(
         get_check_result_repository
     ),
-    now: datetime = Depends(get_now),
-    since: AwareDatetime | None = Query(default=None),
+    since: datetime = Depends(get_check_results_since),
 ) -> list[CheckResult]:
-    effective_since = since or (now - CHECK_RESULTS_DEFAULT_WINDOW)
-    oldest_allowed = now - CHECK_RESULTS_MAX_AGE
-    if effective_since < oldest_allowed:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"since must be at most {CHECK_RESULTS_MAX_AGE.days} days ago",
-        )
-    results = check_result_repository.list_for_monitor(
-        current_monitor.id, since=effective_since
-    )
+    results = check_result_repository.list_for_monitor(current_monitor.id, since=since)
 
     return results
+
+
+@monitors_router.get("/{monitor_id}/stats", response_model=MonitorStatsRead)
+def get_monitor_stats(
+    current_monitor: Monitor = Depends(get_current_user_monitor),
+    check_result_repository: CheckResultRepository = Depends(
+        get_check_result_repository
+    ),
+    since: datetime = Depends(get_check_results_since),
+) -> MonitorStatsRead:
+    results = check_result_repository.list_for_monitor(current_monitor.id, since=since)
+    return MonitorStatsRead(
+        uptime_percentage=uptime_percentage(results),
+        average_response_time_ms=average_response_time(results),
+        check_count=len(results),
+    )
 
 
 def _to_domain_monitor(

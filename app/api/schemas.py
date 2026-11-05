@@ -64,3 +64,9 @@ class CheckResultRead(BaseModel):
     checked_at: datetime
     is_up: bool
     response_time_ms: int | None
+
+
+class MonitorStatsRead(BaseModel):
+    uptime_percentage: float | None
+    average_response_time_ms: float | None
+    check_count: int

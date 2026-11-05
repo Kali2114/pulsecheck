@@ -2,8 +2,9 @@ from collections.abc import Generator
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 
-from fastapi import Depends
+from fastapi import Depends, HTTPException, Query, status
 from fastapi.security import OAuth2PasswordBearer
+from pydantic import AwareDatetime
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import settings
@@ -22,6 +23,9 @@ from app.infrastructure.password_hasher import BcryptPasswordHasher
 from app.infrastructure.user_repository import SQLAlchemyUserRepository
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+
+CHECK_RESULTS_DEFAULT_WINDOW = timedelta(hours=1)
+CHECK_RESULTS_MAX_AGE = timedelta(days=7)
 
 
 def get_session_factory() -> sessionmaker[Session]:
@@ -70,6 +74,20 @@ def get_token_service() -> JWTTokenService:
 
 def get_now() -> datetime:
     return datetime.now(UTC)
+
+
+def get_check_results_since(
+    since: AwareDatetime | None = Query(default=None),
+    now: datetime = Depends(get_now),
+) -> datetime:
+    if since is None:
+        return now - CHECK_RESULTS_DEFAULT_WINDOW
+    if since < now - CHECK_RESULTS_MAX_AGE:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"since must be at most {CHECK_RESULTS_MAX_AGE.days} days ago",
+        )
+    return since
 
 
 def get_current_user(
