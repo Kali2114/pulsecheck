@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 import pytest
 from alembic.config import Config
 from sqlalchemy import create_engine
@@ -5,8 +7,10 @@ from sqlalchemy.orm import sessionmaker
 
 from alembic import command
 from app.config import settings
+from app.infrastructure.check_result_repository import SQLAlchemyCheckResultRepository
+from app.infrastructure.monitor_repository import SQLAlchemyMonitorRepository
 from app.infrastructure.user_repository import SQLAlchemyUserRepository
-from tests.domain.utils import create_user
+from tests.domain.utils import create_monitor, create_user
 
 
 @pytest.fixture(scope="session")
@@ -62,3 +66,32 @@ def make_user(session_factory):
         return user.id
 
     return _make_user
+
+
+@pytest.fixture
+def add_monitor(session_factory):
+
+    def _add_monitor(user_id, url="https://example.com"):
+        with session_factory() as session:
+            saved = SQLAlchemyMonitorRepository(session).add_monitor(
+                create_monitor(
+                    user_id=user_id, url=url, check_interval=timedelta(seconds=10)
+                )
+            )
+            session.commit()
+        return saved
+
+    return _add_monitor
+
+
+@pytest.fixture
+def add_check_results(session_factory):
+
+    def _add_check_results(*check_results):
+        with session_factory() as session:
+            repository = SQLAlchemyCheckResultRepository(session)
+            for check_result in check_results:
+                repository.add_check_result(check_result)
+            session.commit()
+
+    return _add_check_results

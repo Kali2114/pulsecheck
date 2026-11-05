@@ -1,38 +1,14 @@
 from datetime import UTC, datetime, timedelta
 
-import pytest
-
-from app.infrastructure.check_result_repository import SQLAlchemyCheckResultRepository
-from app.infrastructure.monitor_repository import SQLAlchemyMonitorRepository
-from tests.domain.utils import create_check_result, create_monitor
+from tests.domain.utils import create_check_result
 
 
 class TestCheckResults:
-    @pytest.fixture(autouse=True)
-    def setup(self, session_factory):
-        self.session_factory = session_factory
-
-    def add_monitor(self, user_id, url="https://example.com"):
-        with self.session_factory() as session:
-            saved = SQLAlchemyMonitorRepository(session).add_monitor(
-                create_monitor(
-                    user_id=user_id, url=url, check_interval=timedelta(seconds=10)
-                )
-            )
-            session.commit()
-        return saved
-
-    def add_check_results(self, *check_results):
-        with self.session_factory() as session:
-            repository = SQLAlchemyCheckResultRepository(session)
-            for check_result in check_results:
-                repository.add_check_result(check_result)
-            session.commit()
 
     def test_no_check_results_returns_empty_list(
-        self, client, registered_user, auth_headers
+        self, client, registered_user, auth_headers, add_monitor
     ):
-        monitor = self.add_monitor(registered_user["id"])
+        monitor = add_monitor(registered_user["id"])
 
         response = client.get(
             f"/monitors/{monitor.id}/check-results", headers=auth_headers
@@ -42,10 +18,10 @@ class TestCheckResults:
         assert response.json() == []
 
     def test_returns_check_results_oldest_first(
-        self, client, registered_user, auth_headers
+        self, client, registered_user, auth_headers, add_check_results, add_monitor
     ):
-        monitor = self.add_monitor(registered_user["id"])
-        self.add_check_results(
+        monitor = add_monitor(registered_user["id"])
+        add_check_results(
             create_check_result(
                 monitor_id=monitor.id,
                 checked_at=datetime(2026, 10, 14, 11, 50, tzinfo=UTC),
@@ -79,11 +55,11 @@ class TestCheckResults:
         ]
 
     def test_returns_only_given_monitors_check_results(
-        self, client, registered_user, auth_headers
+        self, client, registered_user, auth_headers, add_monitor, add_check_results
     ):
-        monitor = self.add_monitor(registered_user["id"], url="https://one.com")
-        other_monitor = self.add_monitor(registered_user["id"], url="https://two.com")
-        self.add_check_results(
+        monitor = add_monitor(registered_user["id"], url="https://one.com")
+        other_monitor = add_monitor(registered_user["id"], url="https://two.com")
+        add_check_results(
             create_check_result(
                 monitor_id=other_monitor.id,
                 checked_at=datetime(2026, 10, 14, 11, 40, tzinfo=UTC),
@@ -104,10 +80,16 @@ class TestCheckResults:
         assert [item["response_time_ms"] for item in response.json()] == [100]
 
     def test_other_users_monitor_returns_404(
-        self, client, registered_user, auth_headers, make_user
+        self,
+        client,
+        registered_user,
+        auth_headers,
+        make_user,
+        add_check_results,
+        add_monitor,
     ):
-        other_monitor = self.add_monitor(make_user())
-        self.add_check_results(
+        other_monitor = add_monitor(make_user())
+        add_check_results(
             create_check_result(
                 monitor_id=other_monitor.id,
                 checked_at=datetime(2026, 10, 14, 11, 45, tzinfo=UTC),
@@ -123,8 +105,10 @@ class TestCheckResults:
             "detail": f"Monitor with id {other_monitor.id} not found"
         }
 
-    def test_unknown_monitor_returns_404(self, client, registered_user, auth_headers):
-        monitor = self.add_monitor(registered_user["id"])
+    def test_unknown_monitor_returns_404(
+        self, client, registered_user, auth_headers, add_monitor
+    ):
+        monitor = add_monitor(registered_user["id"])
         unknown_id = monitor.id + 1
 
         response = client.get(
@@ -141,10 +125,10 @@ class TestCheckResults:
         assert response.json() == {"detail": "Not authenticated"}
 
     def test_get_check_results_returns_only_results_since_given_time(
-        self, client, registered_user, auth_headers, now
+        self, client, registered_user, auth_headers, now, add_monitor, add_check_results
     ):
-        monitor = self.add_monitor(registered_user["id"])
-        self.add_check_results(
+        monitor = add_monitor(registered_user["id"])
+        add_check_results(
             create_check_result(
                 monitor_id=monitor.id,
                 checked_at=now - timedelta(hours=3),
@@ -167,10 +151,10 @@ class TestCheckResults:
         assert data[0]["checked_at"] == "2026-10-14T10:30:00Z"
 
     def test_without_since_returns_only_last_hour(
-        self, client, registered_user, auth_headers, now
+        self, client, registered_user, auth_headers, now, add_monitor, add_check_results
     ):
-        monitor = self.add_monitor(registered_user["id"])
-        self.add_check_results(
+        monitor = add_monitor(registered_user["id"])
+        add_check_results(
             create_check_result(
                 monitor_id=monitor.id,
                 checked_at=now - timedelta(hours=1, seconds=1),
@@ -191,10 +175,10 @@ class TestCheckResults:
         ]
 
     def test_since_exactly_seven_days_ago_is_accepted(
-        self, client, registered_user, auth_headers, now
+        self, client, registered_user, auth_headers, now, add_monitor, add_check_results
     ):
-        monitor = self.add_monitor(registered_user["id"])
-        self.add_check_results(
+        monitor = add_monitor(registered_user["id"])
+        add_check_results(
             create_check_result(
                 monitor_id=monitor.id,
                 checked_at=now - timedelta(days=7),
@@ -214,9 +198,9 @@ class TestCheckResults:
         ]
 
     def test_since_older_than_seven_days_returns_422(
-        self, client, registered_user, auth_headers, now
+        self, client, registered_user, auth_headers, now, add_monitor
     ):
-        monitor = self.add_monitor(registered_user["id"])
+        monitor = add_monitor(registered_user["id"])
         since = now - timedelta(days=7, seconds=1)
 
         response = client.get(
@@ -228,8 +212,10 @@ class TestCheckResults:
         assert response.status_code == 422
         assert response.json() == {"detail": "since must be at most 7 days ago"}
 
-    def test_naive_since_returns_422(self, client, registered_user, auth_headers):
-        monitor = self.add_monitor(registered_user["id"])
+    def test_naive_since_returns_422(
+        self, client, registered_user, auth_headers, add_monitor
+    ):
+        monitor = add_monitor(registered_user["id"])
 
         response = client.get(
             f"/monitors/{monitor.id}/check-results",
@@ -243,10 +229,10 @@ class TestCheckResults:
         ]
 
     def test_future_since_returns_empty_list(
-        self, client, registered_user, auth_headers, now
+        self, client, registered_user, auth_headers, now, add_monitor, add_check_results
     ):
-        monitor = self.add_monitor(registered_user["id"])
-        self.add_check_results(
+        monitor = add_monitor(registered_user["id"])
+        add_check_results(
             create_check_result(
                 monitor_id=monitor.id,
                 checked_at=now - timedelta(minutes=10),
