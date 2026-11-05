@@ -461,8 +461,12 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
     before `get_now()`; **cap** `CHECK_RESULTS_MAX_AGE = timedelta(days=7)` — older → 422
     `HTTPException`, `detail` `"since must be at most 7 days ago"` (built from `.days`). Not
     clamped: loosening a cap later is safe, tightening breaks clients; raw rows are ~60k/week
-    at a 10s interval. Both constants live at the top of `app/api/monitors.py` — move them
-    somewhere shared when the stats endpoint needs them, don't copy. Constants are `timedelta`s
+    at a 10s interval. Since the stats endpoint, the rules and both constants live in **one**
+    dependency, `get_check_results_since` (`app/api/dependencies.py`, next to `get_now`) —
+    it declares the `since` query param and `get_now` itself and returns the effective `since`
+    (checks `is None`; the old routes' `since or ...` is gone). Routes declare
+    `since: datetime = Depends(get_check_results_since)`; `/docs` still shows the param.
+    Constants are `timedelta`s
     named by meaning (window / max age), not unit (`_HOURS` lied once it held a duration).
     **Naive → 422** comes from `AwareDatetime` before the route runs — with plain `datetime` a
     naive value crashed the cap comparison (`TypeError` → 500). The cap needs "now", so it's in
@@ -479,6 +483,35 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
     test pins only the error `loc` (`["query", "since"]`), not Pydantic's message.
     Lesson: implementing the default before its test gave 100% coverage with the window
     untested (`hours=100` stayed green) — write the test for each rule you add.
-  - Next: the stats endpoint (uptime % / average response time from `statistics.py`) with the
-    **same** `since` semantics, so chart and numbers describe the same window. Bucketing raw
-    points (`date_trunc`) is deferred until the cap needs to grow.
+  - **`GET /monitors/{id}/stats` — done** (2026-11-05, pushed): route `get_monitor_stats` →
+    `MonitorStatsRead` `{uptime_percentage, average_response_time_ms, check_count}`, over the
+    same `since` window (shared dependency above), ownership via `get_current_user_monitor`.
+    Maths stays in the domain (`statistics.py`, one definition of uptime): rows via
+    `list_for_monitor`, then `uptime_percentage` / `average_response_time` / `len()`. SQL
+    aggregates are the later upgrade (with bucketing, when the cap grows).
+    Decisions (all pinned): uptime from **all** checks; average from **up** checks only — the
+    user first proposed "every check with a response", rejected because fast 500 pages would
+    make an outage look *faster*; the first test's down check with a 50 ms response pins it
+    (up-only = 100, with it = 87.5). No checks → both `null`, `check_count` 0, still 200. All
+    down without a response → uptime **`0.0`, not `null`** (a frontend `if (uptime)` would
+    misread 0). `check_count` added because 100% from 1 check ≠ 100% from 8,640; the effective
+    `since` is **not** returned (no client needs it; adding a response field later is safe,
+    removing one breaks clients). No rounding in the API (raw floats; display concern).
+  - Stats tests (`tests/api/test_monitor_stats.py`): maths, window (1s outside / inside the
+    default hour → `check_count` 1), no checks, all down, other user's + unknown id → exact
+    404 detail, no token → 401. The window test is the only one guarding the window
+    (mutation `since=None` → only it goes red, `2 == 1`); the ownership tests matter most —
+    without them a plain lookup would leak stats to any user with all tests green.
+  - Seeding fixtures: `add_monitor(user_id, url="https://example.com")` (10s interval, returns
+    the saved monitor) and `add_check_results(*check_results)` are **factory fixtures** in
+    `tests/helpers/database_fixtures.py`, same shape as `make_user` — outer fixture takes
+    `session_factory`, returns the inner function. Gotcha hit: every parameter of a fixture is
+    read as a *fixture name* (`fixture 'self' not found`) — call arguments belong on the inner
+    function. A refactor must change no behaviour (the default URL silently became `http`).
+  - **Mutation checks** are manual experiments, nothing saved: back up the file, break the one
+    thing the test claims to protect, run, expect red, restore, confirm the mutant is gone.
+    Tests that pass immediately (behaviour already implemented) always need one.
+  - **Read endpoints for the dashboard are done.** Next: the no-framework frontend (Claude
+    builds it, the user directs by screenshot/description). Open for it: the monitor list
+    needs each monitor's current status — one stats call per monitor is N+1; consider the
+    latest status in `GET /monitors` when that page is built.
