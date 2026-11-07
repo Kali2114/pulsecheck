@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     postgres_host: str = "localhost"
     scheduler_enabled: bool = True
     secret_key: str
+    token_lifetime_hours: int = 24
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -25,6 +26,13 @@ class Settings(BaseSettings):
     def secret_key_must_be_long_enough(cls, value: str) -> str:
         if len(value.encode("utf-8")) < MIN_SECRET_KEY_BYTES:
             raise ValueError(f"must be at least {MIN_SECRET_KEY_BYTES} bytes for HS256")
+        return value
+
+    @field_validator("token_lifetime_hours")
+    @classmethod
+    def token_lifetime_must_be_positive(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("token_lifetime_hours must be positive")
         return value
 
     def _build_database_url(self, database_name: str) -> URL:

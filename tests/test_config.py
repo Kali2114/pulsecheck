@@ -88,3 +88,21 @@ def test_secret_key_length_counts_bytes_not_characters():
     settings = create_settings(secret_key="ą" * 16)
 
     assert settings.secret_key == "ą" * 16
+
+
+def test_default_token_lifetime_is_24h():
+    settings = create_settings()
+
+    assert settings.token_lifetime_hours == 24
+
+
+@pytest.mark.parametrize("value", [0, -1])
+def test_token_lifetime_negative_or_zero_value_raises(value):
+    with pytest.raises(ValidationError, match="token_lifetime_hours"):
+        create_settings(token_lifetime_hours=value)
+
+
+def test_token_lifetime_positive_value():
+    settings = create_settings(token_lifetime_hours=1)
+
+    assert settings.token_lifetime_hours == 1

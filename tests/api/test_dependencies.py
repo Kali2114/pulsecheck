@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -100,3 +100,9 @@ class TestTokenAndClockDependencies:
 
         assert result.tzinfo == UTC
         assert before <= result <= after
+
+    def test_get_token_service_uses_token_lifetime_setting(self, monkeypatch):
+        monkeypatch.setattr(settings, "token_lifetime_hours", 7)
+        service = get_token_service()
+
+        assert service.token_lifetime == timedelta(hours=7)

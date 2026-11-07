@@ -68,7 +68,7 @@ def get_auth_service(
 def get_token_service() -> JWTTokenService:
     return JWTTokenService(
         secret_key=settings.secret_key,
-        token_lifetime=timedelta(minutes=15),
+        token_lifetime=timedelta(hours=settings.token_lifetime_hours),
     )
 
 
