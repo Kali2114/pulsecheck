@@ -338,7 +338,8 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
   **`python-multipart`** (now in `requirements.txt` — without it importing the router crashes the
   app). Returns `TokenResponse` `{"access_token", "token_type": "bearer"}`. Reads the clock only
   through `get_now()` (`datetime.now(UTC)`, the one place); the token service comes from
-  `get_token_service()` (`settings.secret_key`, 15-minute lifetime). API tests override both
+  `get_token_service()` (`settings.secret_key`, lifetime from `settings.token_lifetime_hours`
+  — 24h default since 2026-11-07, was a hardcoded 15 minutes). API tests override both
   (`tests/api/conftest.py`: `token_service` fixture with a 46-byte secret, fixed `now` fixture)
   and decode the returned token back to the user id. Assert status first, then shape, then
   decode — otherwise a 404 shows up as a confusing `KeyError`.
@@ -511,7 +512,35 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
   - **Mutation checks** are manual experiments, nothing saved: back up the file, break the one
     thing the test claims to protect, run, expect red, restore, confirm the mutant is gone.
     Tests that pass immediately (behaviour already implemented) always need one.
-  - **Read endpoints for the dashboard are done.** Next: the no-framework frontend (Claude
-    builds it, the user directs by screenshot/description). Open for it: the monitor list
-    needs each monitor's current status — one stats call per monitor is N+1; consider the
-    latest status in `GET /monitors` when that page is built.
+  - **Read endpoints for the dashboard are done.**
+- **Frontend design (decided 2026-11-06):** served like fridgewatch (`StaticFiles` mount +
+  `GET /` → `index.html`, same origin so no CORS), but split into `index.html` + CSS + a few
+  **native ES modules** (no build step, no npm) — one module owns the API calls + token so the
+  later public status page can reuse it. One page with **hash routing** (`#/monitors/5`):
+  login/register, monitor list (status pill with text — never colour alone — URL, interval,
+  last check), monitor detail (stat tiles, response-time chart, 1h | 24h | 7d segmented
+  control = the API's default and cap), add/edit/delete. **Chart.js** from a CDN with the
+  built-in **decimation** plugin (7d ≈ 60k points); `null` response times are gaps, downtime
+  red. **Polling** in v1: 15s (list, 1h/24h), 60s (7d), paused while the tab is hidden and
+  refreshed on return, never overlapping — all through one "reload current view" function the
+  WebSocket milestone will call instead. Look: "modern" — cards, soft shadows, system font
+  stack, light/dark from the system setting, mobile-friendly; the user steers by screenshot.
+  Token stays in `localStorage` (like fridgewatch); 401 → login.
+  Order: (1) token lifetime → 24h — done; (2) latest status in `GET /monitors` (user, TDD;
+  decide the "no checks yet" shape first — avoids the N+1 of one stats call per monitor);
+  (3) serve `/` + static mount (Claude, with a test); (4) the frontend, login + list first.
+- **Token lifetime — done** (2026-11-07): `Settings.token_lifetime_hours: int = 24`
+  (env `TOKEN_LIFETIME_HOURS`), a `field_validator` rejects `<= 0` (a 0 lifetime would make
+  every token expire at once and the app look broken with no error). Hours, so the minimum is
+  1h — fine, tests override the token service anyway. `get_token_service()` builds
+  `timedelta(hours=settings.token_lifetime_hours)`. Refresh tokens are a possible later
+  milestone. Nothing pinned the old 15 minutes (`test_dependencies` read the lifetime *back*
+  from the service), so changing the number alone would have stayed green.
+  Tests: default 24, 0/-1 rejected (`match="token_lifetime_hours"`), 1 accepted (boundary);
+  `get_token_service` test monkeypatches the **`settings` instance** (as `test_lifespan`
+  does) to 7 and asserts the **literal** `timedelta(hours=7)` — patching the module `config`
+  fails (no such attribute; the value lives on the instance), and replacing the module-level
+  *name* wouldn't reach `dependencies`, which holds its own reference to the same object.
+  Mutation-checked (hardcoded 24h → red). Recomputing the expected value with
+  `settings.token_lifetime_hours` would copy a formula bug (`minutes=` for `hours=`) into the
+  test.
