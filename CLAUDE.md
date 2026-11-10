@@ -544,3 +544,34 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
   Mutation-checked (hardcoded 24h → red). Recomputing the expected value with
   `settings.token_lifetime_hours` would copy a formula bug (`minutes=` for `hours=`) into the
   test.
+- **Latest status for the monitor list — repository part done** (2026-11-10). Decided shape:
+  `MonitorRead.latest_check: CheckResultRead | None` (`null` = no checks yet) on **every**
+  monitor route — a fact ("what the last check saw"), not a `"status": "up"/"down"` field,
+  because incident detection will redefine "down" (N consecutive failures); the incident
+  status can be its own field then (adding fields is safe, changing meaning isn't).
+  - `get_latest_for_monitors(monitor_ids: list[int]) -> dict[int, CheckResult]` on the
+    `CheckResultRepository` Protocol and both repositories. A monitor without results is
+    **absent** from the dict (not `None`); empty ids → `{}`. In-memory: a loop over
+    `get_latest`, keeping only non-`None` (one source of truth for "no results").
+  - SQLAlchemy: **one query** — `.where(monitor_id.in_(ids))`,
+    `.ext(distinct_on(CheckResultModel.monitor_id))` (`sqlalchemy.dialects.postgresql`; the
+    old `.distinct(column)` is **deprecated in SQLAlchemy 2.1** — it warns), `order_by`
+    `monitor_id` **first** (Postgres requires the `DISTINCT ON` column to lead), then
+    `checked_at.desc()`. No tie-breaker on equal `checked_at` (accepted). No early return for
+    `[]` — an empty `in_` matches nothing.
+  - Tests mirrored in `tests/domain/` and `tests/infrastructure/` (same four names): latest per
+    monitor (both monitors old + new, newest inserted first, **different** latest times so a
+    mix-up between monitors fails — name the seeded time and reuse the name in the assert;
+    two slips came from changing data without the matching literal); only requested monitors
+    (the unrequested one holds the newest result of all); monitors without results left out
+    (request **both** — requesting only the one with data proves nothing); empty ids → `{}`
+    (with a result seeded, so "empty means all" fails). Infrastructure `_add_result` takes an
+    optional `monitor_id` (defaults to `self.monitor.id`); repository tests keep their own
+    helper on `db_session` — the shared `add_monitor` / `add_check_results` fixtures commit
+    via `session_factory` and are for API tests.
+  - Gotchas: compare datetimes with `==`, never `is` (in-memory hands back the same object, so
+    `is` passes there and fails against Postgres); `from datetime import datetime` makes
+    `datetime` the **class** — `datetime.timedelta` doesn't exist, use the imported `timedelta`.
+  - Next: step 3 — `latest_check` in `MonitorRead`; `GET /monitors` uses
+    `get_latest_for_monitors` once, single-monitor routes `get_latest`; exact-dict monitor
+    API tests (e.g. `test_post_monitor`) will break on the new key — update them.
