@@ -12,6 +12,7 @@ class TestCheckResultRepository:
         self.check_result = create_check_result()
         self.repository = InMemoryCheckResultRepository()
         self.repository.add_check_result(self.check_result)
+        self.base_time = self.check_result.checked_at
 
     def test_list_for_monitor_returns_added_result(self):
         monitor_results = self.repository.list_for_monitor(self.check_result.monitor_id)
@@ -84,6 +85,58 @@ class TestCheckResultRepository:
 
     def test_get_latest_returns_none_for_monitor_without_results(self):
         assert self.repository.get_latest(99) is None
+
+    def test_get_latest_for_monitors_returns_latest_result_per_monitor(self):
+        first_check_old = create_check_result(
+            monitor_id=10, checked_at=self.base_time - timedelta(minutes=5)
+        )
+        first_check_new = create_check_result(
+            monitor_id=10, checked_at=self.base_time + timedelta(minutes=5)
+        )
+        second_check_old = create_check_result(
+            monitor_id=20, checked_at=self.base_time - timedelta(minutes=5)
+        )
+        second_check_new = create_check_result(
+            monitor_id=20, checked_at=self.base_time + timedelta(minutes=5)
+        )
+        checks = [second_check_new, first_check_new, second_check_old, first_check_old]
+        for check in checks:
+            self.repository.add_check_result(check)
+
+        results = self.repository.get_latest_for_monitors([10, 20])
+
+        assert len(results) == 2
+        assert results[10].checked_at == first_check_new.checked_at
+        assert results[20].checked_at == second_check_new.checked_at
+
+    def test_get_latest_for_monitors_returns_only_requested_monitors(self):
+        check_in = create_check_result(
+            monitor_id=10, checked_at=self.base_time + timedelta(minutes=5)
+        )
+        check_out = create_check_result(
+            monitor_id=20, checked_at=self.base_time + timedelta(minutes=10)
+        )
+        self.repository.add_check_result(check_in)
+        self.repository.add_check_result(check_out)
+
+        results = self.repository.get_latest_for_monitors([10])
+
+        assert set(results.keys()) == {10}
+
+    def test_get_latest_for_monitors_leaves_out_monitors_without_results(self):
+        check = create_check_result(
+            monitor_id=20, checked_at=self.base_time + timedelta(minutes=5)
+        )
+        self.repository.add_check_result(check)
+
+        results = self.repository.get_latest_for_monitors([10, 20])
+
+        assert set(results.keys()) == {20}
+
+    def test_get_latest_for_monitors_returns_empty_dict_when_no_ids(self):
+        results = self.repository.get_latest_for_monitors([])
+
+        assert results == {}
 
     def test_in_memory_repository_satisfies_check_result_repository_protocol(self):
         assert isinstance(self.repository, CheckResultRepository)

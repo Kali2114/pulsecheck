@@ -20,10 +20,12 @@ class TestSQLAlchemyCheckResultRepository:
         self.monitor_repository.add_monitor(self.monitor)
         self.now = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
 
-    def _add_result(self, checked_at: datetime) -> CheckResult:
-        check_result = create_check_result(
-            monitor_id=self.monitor.id, checked_at=checked_at
-        )
+    def _add_result(
+        self, checked_at: datetime, monitor_id: int | None = None
+    ) -> CheckResult:
+        if monitor_id is None:
+            monitor_id = self.monitor.id
+        check_result = create_check_result(monitor_id=monitor_id, checked_at=checked_at)
         self.check_result_repository.add_check_result(check_result)
         return check_result
 
@@ -131,6 +133,77 @@ class TestSQLAlchemyCheckResultRepository:
         result = self.check_result_repository.get_latest(self.monitor.id)
 
         assert result is None
+
+    def test_get_latest_for_monitors_returns_latest_check_for_each_monitor(self):
+        older_time = self.now - timedelta(hours=1)
+        newer_time = self.now + timedelta(hours=1)
+        newer_time_for_other_monitor = self.now + timedelta(minutes=15)
+        self._add_result(newer_time)
+        self._add_result(older_time)
+        other_monitor = self.monitor_repository.add_monitor(
+            create_monitor(user_id=self.make_user())
+        )
+        self._add_result(
+            monitor_id=other_monitor.id, checked_at=newer_time_for_other_monitor
+        )
+        self._add_result(
+            monitor_id=other_monitor.id,
+            checked_at=older_time,
+        )
+        self.db_session.expire_all()
+
+        result = self.check_result_repository.get_latest_for_monitors(
+            [self.monitor.id, other_monitor.id]
+        )
+
+        assert set(result) == {self.monitor.id, other_monitor.id}
+        assert result[self.monitor.id].checked_at == newer_time
+        assert result[other_monitor.id].checked_at == newer_time_for_other_monitor
+
+    def test_get_latest_for_monitors_returns_only_requested_monitors(self):
+        self._add_result(self.now)
+        other_monitor = self.monitor_repository.add_monitor(
+            create_monitor(user_id=self.make_user())
+        )
+        last_monitor = self.monitor_repository.add_monitor(
+            create_monitor(user_id=self.make_user())
+        )
+        self._add_result(
+            monitor_id=other_monitor.id,
+            checked_at=self.now,
+        )
+        self._add_result(
+            monitor_id=last_monitor.id,
+            checked_at=self.now + timedelta(hours=1),
+        )
+        self.db_session.expire_all()
+
+        results = self.check_result_repository.get_latest_for_monitors(
+            [self.monitor.id, other_monitor.id]
+        )
+
+        assert set(results) == {self.monitor.id, other_monitor.id}
+
+    def test_get_latest_for_monitors_leaves_out_monitors_without_results(self):
+        self._add_result(self.now)
+        other_monitor = self.monitor_repository.add_monitor(
+            create_monitor(user_id=self.make_user())
+        )
+        self.db_session.expire_all()
+
+        results = self.check_result_repository.get_latest_for_monitors(
+            [self.monitor.id, other_monitor.id]
+        )
+
+        assert set(results) == {self.monitor.id}
+
+    def test_get_latest_for_monitors_returns_empty_dict_when_no_ids(self):
+        self._add_result(self.now)
+        self.db_session.expire_all()
+
+        results = self.check_result_repository.get_latest_for_monitors([])
+
+        assert results == {}
 
     def test_sqlalchemy_repository_satisfies_check_result_repository_protocol(
         self,

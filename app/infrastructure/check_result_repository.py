@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Session
 
 from app.domain.check_result import CheckResult
@@ -45,6 +46,19 @@ class SQLAlchemyCheckResultRepository:
         if model is None:
             return None
         return self._to_domain(model)
+
+    def get_latest_for_monitors(self, monitor_ids: list[int]) -> dict[int, CheckResult]:
+        statement = (
+            select(CheckResultModel)
+            .where(CheckResultModel.monitor_id.in_(monitor_ids))
+            .ext(distinct_on(CheckResultModel.monitor_id))
+            .order_by(
+                CheckResultModel.monitor_id,
+                CheckResultModel.checked_at.desc(),
+            )
+        )
+        models = self.session.execute(statement).scalars().all()
+        return {model.monitor_id: self._to_domain(model) for model in models}
 
     @staticmethod
     def _to_domain(model: CheckResultModel) -> CheckResult:

@@ -15,6 +15,10 @@ class CheckResultRepository(Protocol):
 
     def get_latest(self, monitor_id: int) -> CheckResult | None: ...
 
+    def get_latest_for_monitors(
+        self, monitor_ids: list[int]
+    ) -> dict[int, CheckResult]: ...
+
 
 class InMemoryCheckResultRepository:
     def __init__(self) -> None:
@@ -41,3 +45,11 @@ class InMemoryCheckResultRepository:
     def get_latest(self, monitor_id: int) -> CheckResult | None:
         monitor_results = self._results_for_monitor(monitor_id)
         return max(monitor_results, key=lambda result: result.checked_at, default=None)
+
+    def get_latest_for_monitors(self, monitor_ids: list[int]) -> dict[int, CheckResult]:
+        results = {}
+        for monitor_id in monitor_ids:
+            latest = self.get_latest(monitor_id)
+            if latest is not None:
+                results[monitor_id] = latest
+        return results
