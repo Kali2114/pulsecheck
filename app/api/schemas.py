@@ -20,6 +20,14 @@ class TokenResponse(BaseModel):
     token_type: str
 
 
+class CheckResultRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    checked_at: datetime
+    is_up: bool
+    response_time_ms: int | None
+
+
 class MonitorCreate(BaseModel):
     url: str
     check_interval_seconds: int = Field(ge=10, le=86400)
@@ -35,6 +43,7 @@ class MonitorRead(BaseModel):
     timeout_seconds: int
     retry_count: int
     last_checked_at: datetime | None
+    latest_check: CheckResultRead | None
 
 
 class MonitorUpdate(BaseModel):
@@ -56,14 +65,6 @@ class MonitorUpdate(BaseModel):
         if value is None:
             raise ValueError("field cannot be null")
         return value
-
-
-class CheckResultRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    checked_at: datetime
-    is_up: bool
-    response_time_ms: int | None
 
 
 class MonitorStatsRead(BaseModel):

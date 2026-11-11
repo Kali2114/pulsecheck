@@ -39,23 +39,34 @@ def create_monitor(
 ) -> MonitorRead:
     monitor = _to_domain_monitor(payload, current_user.id)
     saved_monitor = monitor_repository.add_monitor(monitor)
-    return _to_monitor_read(saved_monitor)
+    return _to_monitor_read(saved_monitor, None)
 
 
 @monitors_router.get("", response_model=list[MonitorRead])
 def list_monitors(
     current_user: User = Depends(get_current_user),
     monitor_repository: MonitorRepository = Depends(get_monitor_repository),
+    check_result_repository: CheckResultRepository = Depends(
+        get_check_result_repository
+    ),
 ) -> list[MonitorRead]:
     monitors = monitor_repository.list_user_monitors(current_user.id)
-    return [_to_monitor_read(m) for m in monitors]
+    latest_checks = check_result_repository.get_latest_for_monitors(
+        [m.id for m in monitors]
+    )
+    return [_to_monitor_read(m, latest_checks.get(m.id)) for m in monitors]
 
 
 @monitors_router.get("/{monitor_id}", response_model=MonitorRead)
 def get_monitor(
     current_monitor: Monitor = Depends(get_current_user_monitor),
+    check_result_repository: CheckResultRepository = Depends(
+        get_check_result_repository
+    ),
 ) -> MonitorRead:
-    return _to_monitor_read(current_monitor)
+    return _to_monitor_read(
+        current_monitor, check_result_repository.get_latest(current_monitor.id)
+    )
 
 
 @monitors_router.patch("/{monitor_id}", response_model=MonitorRead)
@@ -63,11 +74,16 @@ def update_monitor(
     payload: MonitorUpdate,
     repository: MonitorRepository = Depends(get_monitor_repository),
     current_monitor: Monitor = Depends(get_current_user_monitor),
+    check_result_repository: CheckResultRepository = Depends(
+        get_check_result_repository
+    ),
 ) -> MonitorRead:
     changes = payload.model_dump(exclude_unset=True)
     domain_changes = _to_domain_changes(changes)
     updated_monitor = repository.update_monitor(current_monitor.id, domain_changes)
-    return _to_monitor_read(updated_monitor)
+    return _to_monitor_read(
+        updated_monitor, check_result_repository.get_latest(updated_monitor.id)
+    )
 
 
 @monitors_router.delete("/{monitor_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -145,7 +161,7 @@ def _to_domain_changes(changes: dict) -> dict:
     return domain_changes
 
 
-def _to_monitor_read(monitor: Monitor) -> MonitorRead:
+def _to_monitor_read(monitor: Monitor, latest_check: CheckResult | None) -> MonitorRead:
     return MonitorRead(
         id=monitor.id,
         url=monitor.url,
@@ -153,4 +169,5 @@ def _to_monitor_read(monitor: Monitor) -> MonitorRead:
         timeout_seconds=monitor.timeout,
         retry_count=monitor.retry_count,
         last_checked_at=monitor.last_checked_at,
+        latest_check=latest_check,
     )

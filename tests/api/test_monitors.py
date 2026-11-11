@@ -4,7 +4,7 @@ import pytest
 
 from app.domain.exceptions import MonitorNotFound
 from app.infrastructure.monitor_repository import SQLAlchemyMonitorRepository
-from tests.domain.utils import create_monitor
+from tests.domain.utils import create_check_result, create_monitor
 
 
 class TestMonitors:
@@ -21,6 +21,7 @@ class TestMonitors:
             "timeout_seconds": 30,
             "retry_count": 3,
             "last_checked_at": None,
+            "latest_check": None,
         }
 
     def test_post_monitor_without_token_returns_401(self, client, monitor_payload):
@@ -88,6 +89,106 @@ class TestMonitors:
         assert response.status_code == 200
         returned_ids = [item["id"] for item in data]
         assert returned_ids == [saved_monitor1.id, saved_monitor2.id]
+
+    def test_get_monitors_returns_latest_check(
+        self, client, auth_headers, registered_user, add_monitor, add_check_results, now
+    ):
+        monitor1 = add_monitor(user_id=registered_user["id"])
+        monitor2 = add_monitor(user_id=registered_user["id"])
+        older = now - timedelta(minutes=10)
+        check1 = create_check_result(
+            monitor_id=monitor1.id,
+            checked_at=now,
+            is_up=True,
+            response_time_ms=20,
+        )
+        check2 = create_check_result(
+            monitor_id=monitor1.id,
+            checked_at=older,
+            is_up=False,
+            response_time_ms=500,
+        )
+        add_check_results(check1, check2)
+        response = client.get("/monitors", headers=auth_headers)
+        data = response.json()
+
+        assert response.status_code == 200
+        assert data[0]["id"] == monitor1.id
+        assert data[0]["latest_check"] == {
+            "checked_at": "2026-10-14T12:00:00Z",
+            "is_up": True,
+            "response_time_ms": 20,
+        }
+        assert data[1]["id"] == monitor2.id
+        assert data[1]["latest_check"] is None
+
+    def test_get_monitor_returns_latest_check(
+        self, client, auth_headers, registered_user, add_monitor, add_check_results, now
+    ):
+        monitor1 = add_monitor(user_id=registered_user["id"])
+        monitor2 = add_monitor(user_id=registered_user["id"])
+        older = now - timedelta(minutes=10)
+        check1 = create_check_result(
+            monitor_id=monitor1.id,
+            checked_at=older,
+            is_up=True,
+            response_time_ms=20,
+        )
+        check2 = create_check_result(
+            monitor_id=monitor2.id, checked_at=now, is_up=False, response_time_ms=200
+        )
+        add_check_results(check1, check2)
+        response = client.get(f"/monitors/{monitor1.id}", headers=auth_headers)
+        data = response.json()
+
+        assert response.status_code == 200
+        assert data["id"] == monitor1.id
+        assert data["latest_check"] == {
+            "checked_at": "2026-10-14T11:50:00Z",
+            "is_up": True,
+            "response_time_ms": 20,
+        }
+
+    def test_get_monitor_latest_check_is_none_without_check_results(
+        self, client, auth_headers, registered_user, add_monitor
+    ):
+        monitor = add_monitor(user_id=registered_user["id"])
+        response = client.get(f"/monitors/{monitor.id}", headers=auth_headers)
+        data = response.json()
+
+        assert response.status_code == 200
+        assert data["id"] == monitor.id
+        assert data["latest_check"] is None
+
+    def test_patch_monitor_returns_existing_latest_check(
+        self, client, auth_headers, registered_user, add_monitor, add_check_results, now
+    ):
+        monitor = add_monitor(
+            url="https://first.example.com",
+            user_id=registered_user["id"],
+        )
+        check = create_check_result(
+            monitor_id=monitor.id,
+            checked_at=now,
+            is_up=True,
+            response_time_ms=20,
+        )
+        add_check_results(check)
+        payload = {"url": "https://afterchange.example.com"}
+        response = client.patch(
+            f"/monitors/{monitor.id}", headers=auth_headers, json=payload
+        )
+        data = response.json()
+
+        assert response.status_code == 200
+
+        assert data["id"] == monitor.id
+        assert data["url"] == "https://afterchange.example.com"
+        assert data["latest_check"] == {
+            "checked_at": "2026-10-14T12:00:00Z",
+            "is_up": True,
+            "response_time_ms": 20,
+        }
 
     def test_get_monitors_returns_200_when_empty(self, client, auth_headers):
         response = client.get("/monitors", headers=auth_headers)
@@ -219,6 +320,7 @@ class TestMonitors:
             "timeout_seconds": 40,
             "retry_count": 5,
             "last_checked_at": None,
+            "latest_check": None,
         }
 
         assert response.status_code == 200
@@ -256,6 +358,7 @@ class TestMonitors:
             "timeout_seconds": 20,
             "retry_count": 3,
             "last_checked_at": None,
+            "latest_check": None,
         }
 
     def test_patch_monitor_rejects_unknown_field(
@@ -315,6 +418,7 @@ class TestMonitors:
             "timeout_seconds": 20,
             "retry_count": 3,
             "last_checked_at": None,
+            "latest_check": None,
         }
 
     def test_patch_monitor_rejects_invalid_value(
