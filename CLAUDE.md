@@ -572,6 +572,25 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
   - Gotchas: compare datetimes with `==`, never `is` (in-memory hands back the same object, so
     `is` passes there and fails against Postgres); `from datetime import datetime` makes
     `datetime` the **class** — `datetime.timedelta` doesn't exist, use the imported `timedelta`.
-  - Next: step 3 — `latest_check` in `MonitorRead`; `GET /monitors` uses
-    `get_latest_for_monitors` once, single-monitor routes `get_latest`; exact-dict monitor
-    API tests (e.g. `test_post_monitor`) will break on the new key — update them.
+- **`latest_check` in monitor responses — done** (2026-11-11, pushed):
+  `MonitorRead.latest_check: CheckResultRead | None` — **required, no default**, so a route
+  that forgets it fails validation instead of silently answering `null`. `CheckResultRead`
+  moved above `MonitorRead` in `schemas.py`. `_to_monitor_read(monitor, latest_check)` takes
+  the domain `CheckResult` (or `None`) and passes it straight to `MonitorRead(...)` — Pydantic
+  reads it via `CheckResultRead`'s `from_attributes`; no manual `model_validate` / `None`
+  branch needed. `GET /monitors`: one `get_latest_for_monitors(ids)`, then
+  `latest_checks.get(m.id)` (absent → `None`). GET by id and PATCH: `get_latest` (PATCH on the
+  *updated* monitor). POST: `None` without a query (a new monitor can't have checks).
+  - Tests (`tests/api/test_monitors.py`): list (monitor with old-down + new-up results, newest
+    inserted first; second monitor `null`), single GET with a result (another monitor holds
+    the *newer* result, so ignoring the id goes red), single GET without results, PATCH on a
+    monitor with a pre-existing result (a lazy `null` goes red); exact-dict tests got
+    `"latest_check": None`. `checked_at` is compared as the JSON string (`"...Z"`), never a
+    `datetime`. Mutation-checked: giving every monitor the first monitor's result turns only
+    the list test red.
+  - Gotchas: PyCharm auto-imported `sqlalchemy.sql.functions.current_user` into the API
+    layer while typing `current_user` — watch auto-imports; `GET /monitors/{id}` returns an
+    object, not a list (`data[0]` → `KeyError: 0`); a typo in a test name (`lastet`) hid the
+    test from `-k latest`.
+  - Next: step 3 of the frontend order — serve `/` + `StaticFiles` mount (Claude, with a
+    test), then the frontend (login + monitor list first).
