@@ -1,7 +1,9 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.auth import router as auth_router
 from app.api.monitors import monitors_router
@@ -34,9 +36,17 @@ async def lifespan(app: FastAPI):
             stop_scheduler(scheduler, client)
 
 
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+
 app = FastAPI(lifespan=lifespan)
 app.include_router(auth_router)
 app.include_router(monitors_router)
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+@app.get("/", include_in_schema=False)
+def index() -> FileResponse:
+    return FileResponse(STATIC_DIR / "index.html")
 
 
 @app.exception_handler(EmailAlreadyRegistered)
