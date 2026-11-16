@@ -3,9 +3,24 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
   <title>PulseCheck</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+  <script type="module" src="/static/js/main.js"></script>
 </head>
 <body>
-  <main id="app">PulseCheck</main>
+  <header class="topbar">
+    <div class="topbar__inner">
+      <a class="brand" href="#/monitors">
+        <span class="brand__dot" aria-hidden="true"></span>
+        PulseCheck
+      </a>
+      <nav class="topbar__nav" id="nav" hidden>
+        <span class="topbar__user" id="nav-user"></span>
+        <button class="button button--ghost" id="logout" type="button">Log out</button>
+      </nav>
+    </div>
+  </header>
+  <main class="container" id="app" aria-live="polite"></main>
 </body>
 </html>
