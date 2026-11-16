@@ -601,6 +601,25 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
   `/` not in `/openapi.json`, API routes still answer (401 on `/monitors`). Mutation-checked
   (root in schema; mount at `/` swallowing the API; wrong file) — a "missing static file →
   404" test was dropped: it passed with or without the mount, so it pinned nothing.
-  - Next: frontend slice 1 — skeleton (CSS tokens + light/dark, API/token ES module, hash
-    router), then login/register, monitor list, detail + chart, add/edit/delete. Step by
-    step, the user steers by screenshot.
+- **Frontend skeleton — done** (2026-11-16, pushed; seen working in Firefox, dark mode):
+  `app/static/` — `index.html` (top bar: brand, `#nav` with user email + "Log out", hidden
+  when logged out; `<main id="app">`), `css/app.css` (tokens on `:root`, dark via
+  `prefers-color-scheme`; `.card`, `.button` / `--ghost` / `--danger`, `.field`, `.input`,
+  `.alert`, `.pill--up/down/unknown` with a dot + text label, `.mono`), and ES modules:
+  - `js/api.js` — the only backend caller: token in `localStorage` (key `pulsecheck.token`,
+    every access in `try/catch`), `request()` adds the bearer header; a 401 on an
+    authenticated call clears the token and fires `pulsecheck:unauthorized` (login/register
+    pass `authenticated: false`, so a wrong password stays a form error). Throws
+    `ApiError(status, detail)`. Wrappers for every route (`login` sends form data with
+    `username`).
+  - `js/router.js` — `createRouter({container, routes, loginPath, homePath})`; routes
+    `{path: "/monitors/:id", view, public?, guestOnly?, reload?}`; a view may return a cleanup
+    function (for timers), run on the next navigation; `reload()` is the "reload current
+    view" hook for polling / WebSockets.
+  - `js/dom.js` — `el(tag, attrs, ...children)`; children become text nodes, so user data
+    (URLs) never turns into HTML. Never use `innerHTML` with API data.
+  - `js/main.js` — routes (placeholders so far), nav refresh via `getMe`, logout.
+  - No Node on the machine — JS isn't syntax-checked locally; the browser is the check.
+- Next: frontend slice 2 — real login + register forms (narrow centred card, not the full
+  960px width), then monitor list, detail + chart, add/edit/delete. Step by step, the user
+  steers by screenshot.
