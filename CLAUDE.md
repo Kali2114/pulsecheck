@@ -629,8 +629,8 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
   `detail` as is, Pydantic 422 lists as `"field: msg"`. The nav refreshes via `main.js`'s
   `hashchange` listener when login state flips.
   - Tip: hard refresh (Ctrl+Shift+R) after JS changes — Firefox caches the modules.
-- **Monitor list — done** (2026-11-16, pushed; checked by the user with monitors added via
-  `/docs` and the scheduler running — rows filled in by polling, no reload).
+- **Monitor list — done** (2026-11-16, pushed; only the **empty state** was seen in the
+  browser at commit time — the account had no monitors, so rows were checked afterwards).
   `js/views/monitors.js` `monitorListView`: header + "+ Add monitor" (→ `#/monitors/new`,
   a placeholder route listed **before** `/monitors/:id`), summary "N up · N down · N
   waiting", rows (whole row links to `#/monitors/:id`) with `statusPill(latest_check)`
@@ -644,6 +644,33 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
     keeps the last data; a 401 is left to `api.js`'s redirect.
   - Router: a view returns either a cleanup function or `{cleanup, reload}`;
     `router.reload()` calls the view's `reload` (WebSocket hook later), else re-renders.
-- Next: frontend slice 4 — monitor detail (stat tiles from `/stats`, Chart.js response-time
-  chart with decimation, `null` = gap, downtime red, 1h | 24h | 7d control; polling 15s /
-  60s for 7d), then add/edit/delete. Step by step, the user steers by screenshot.
+  - List rows confirmed in the browser later with three dev monitors (ids 2–4, added by
+    SQL for user 1): `https://example.com` (up), `https://httpbin.org/status/500` (down
+    with a time), `https://does-not-exist.invalid` (down, no response). Possible polish:
+    the 130px pill column leaves a wide gap before the URL.
+- **Monitor detail — done** (2026-11-16, pushed; user confirmed it works after the tick
+  fix). `js/views/monitor-detail.js` `monitorDetailView`: back link, header (pill, URL,
+  "Every 10s · timeout 5s · 1 attempt · last check …"), tiles (Uptime — `100%` or 2
+  decimals, `—` for `null`; Avg response "up checks only"; Checks), chart card with
+  `1h | 24h | 7d` segmented control (`aria-pressed`). One `load()` = `Promise.all` of
+  monitor + check-results + stats for `since = now - range`; stale responses for an old
+  range are dropped. Polling 15s (1h/24h), 60s (7d) — a new poller per range. 404 →
+  "Monitor not found" card, polling stops, chart destroyed.
+  - **Decimation replaced** (deviation from the plan, told to the user):
+    `js/chart-data.js` `buildSeries(results, fromMs, toMs)` — ≤600 checks drawn raw
+    (down = `y: null` gap in the line + a red marker at y=0), more → 300 time buckets
+    (average of up response times; a red marker for every bucket with ≥1 failure,
+    tooltip "Down: N of M checks failed"). Chart.js decimation can drop single failed
+    points and hide outages.
+  - 7d asks for `7 days - 1 minute`: browser clock behind the server would otherwise hit
+    the API's 422 cap.
+  - Chart: Chart.js **4.4.1** UMD from jsDelivr (`<script defer>` before the module,
+    global `window.Chart`; page works without it). Linear x axis (ms timestamps, no date
+    adapter), `min`/`max` = the whole window (sparse new data sits at the right edge —
+    intended). Ticks generated in `afterBuildTicks` on local clock boundaries
+    (`tickStepMs`: 10 min / 3 h / 1 day) — the default linear ticks gave uneven times
+    (07:28, 07:53, 08:10). Colours read from the CSS variables at creation.
+  - Removed the comments left in `api.js` (no-comments rule applies to JS too).
+- Next: frontend slice 5 — add / edit / delete monitor (replace the `#/monitors/new`
+  placeholder; edit + delete from the detail page). Step by step, the user steers by
+  screenshot.
