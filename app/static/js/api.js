@@ -8,6 +8,18 @@ export class ApiError extends Error {
   }
 }
 
+export function errorMessage(error) {
+  if (error instanceof ApiError && Array.isArray(error.detail) && error.detail.length > 0) {
+    const first = error.detail[0];
+    const fieldName = Array.isArray(first.loc) ? first.loc[first.loc.length - 1] : null;
+    return fieldName ? `${fieldName}: ${first.msg}` : first.msg;
+  }
+  if (error instanceof ApiError || error instanceof Error) {
+    return error.message;
+  }
+  return "Something went wrong.";
+}
+
 export function getToken() {
   try {
     return localStorage.getItem(TOKEN_KEY);

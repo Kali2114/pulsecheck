@@ -257,6 +257,53 @@ a {
   background: var(--unknown-bg);
 }
 
+.button--block {
+  width: 100%;
+  padding: 10px 14px;
+  margin-top: 4px;
+}
+
+.field__hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.auth {
+  max-width: 400px;
+  margin: 48px auto 0;
+}
+
+.auth__card {
+  padding: 28px;
+}
+
+.auth__title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.auth__subtitle {
+  margin: 4px 0 20px;
+}
+
+.auth__footer {
+  margin: 16px 0 0;
+  text-align: center;
+  font-size: 14px;
+}
+
+@media (max-width: 480px) {
+  .auth {
+    margin-top: 16px;
+  }
+
+  .auth__card {
+    padding: 20px;
+  }
+}
+
 .mono {
   font-family: var(--font-mono);
   font-size: 13px;

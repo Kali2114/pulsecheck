@@ -1,6 +1,7 @@
 import { getMe, isLoggedIn, logout } from "./api.js";
 import { el } from "./dom.js";
 import { createRouter } from "./router.js";
+import { loginView, registerView } from "./views/auth.js";
 
 const container = document.getElementById("app");
 const nav = document.getElementById("nav");
@@ -16,8 +17,8 @@ function placeholder(title, text) {
 }
 
 const routes = [
-  { path: "/login", public: true, guestOnly: true, view: placeholder("Log in", "Login form comes next.") },
-  { path: "/register", public: true, guestOnly: true, view: placeholder("Create account", "Register form comes next.") },
+  { path: "/login", public: true, guestOnly: true, view: loginView },
+  { path: "/register", public: true, guestOnly: true, view: registerView },
   { path: "/monitors", view: placeholder("Monitors", "Monitor list comes next.") },
   {
     path: "/monitors/:id",
