@@ -592,5 +592,15 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
     layer while typing `current_user` — watch auto-imports; `GET /monitors/{id}` returns an
     object, not a list (`data[0]` → `KeyError: 0`); a typo in a test name (`lastet`) hid the
     test from `-k latest`.
-  - Next: step 3 of the frontend order — serve `/` + `StaticFiles` mount (Claude, with a
-    test), then the frontend (login + monitor list first).
+- **Serving the frontend — done** (2026-11-16, pushed): `app/main.py` has
+  `STATIC_DIR = Path(__file__).resolve().parent / "static"` (resolved from `main.py`, unlike
+  fridgewatch's cwd-relative `"static"`; inside `app/` so it ships with the package),
+  `app.mount("/static", StaticFiles(...))` and `GET /` → `FileResponse(index.html)` with
+  `include_in_schema=False`. `app/static/index.html` is a placeholder. Tests
+  (`tests/api/test_frontend.py`): `/` serves HTML with the title, a static file is served,
+  `/` not in `/openapi.json`, API routes still answer (401 on `/monitors`). Mutation-checked
+  (root in schema; mount at `/` swallowing the API; wrong file) — a "missing static file →
+  404" test was dropped: it passed with or without the mount, so it pinned nothing.
+  - Next: frontend slice 1 — skeleton (CSS tokens + light/dark, API/token ES module, hash
+    router), then login/register, monitor list, detail + chart, add/edit/delete. Step by
+    step, the user steers by screenshot.
