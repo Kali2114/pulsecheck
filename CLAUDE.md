@@ -620,6 +620,15 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
     (URLs) never turns into HTML. Never use `innerHTML` with API data.
   - `js/main.js` — routes (placeholders so far), nav refresh via `getMe`, logout.
   - No Node on the machine — JS isn't syntax-checked locally; the browser is the check.
-- Next: frontend slice 2 — real login + register forms (narrow centred card, not the full
-  960px width), then monitor list, detail + chart, add/edit/delete. Step by step, the user
-  steers by screenshot.
+- **Login + register forms — done** (2026-11-16, pushed; tested in the browser by the user:
+  register → list, wrong password → "Invalid credentials", duplicate email → 409 message).
+  `js/views/auth.js` (`loginView`, `registerView`, shared `authCard`): narrow centred card
+  (`.auth`, 400px); register checks password = confirm client-side, then registers **and
+  logs in**, then goes to `/monitors`; button disabled + "Please wait…" while a request
+  runs; `autocomplete` hints for password managers. `api.js` `errorMessage(error)`: string
+  `detail` as is, Pydantic 422 lists as `"field: msg"`. The nav refreshes via `main.js`'s
+  `hashchange` listener when login state flips.
+  - Tip: hard refresh (Ctrl+Shift+R) after JS changes — Firefox caches the modules.
+- Next: frontend slice 3 — monitor list (status pill from `latest_check`, URL, interval,
+  last check; 15s polling paused while hidden, never overlapping), then detail + chart,
+  add/edit/delete. Step by step, the user steers by screenshot.
