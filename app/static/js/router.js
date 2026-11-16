@@ -2,7 +2,7 @@ import { isLoggedIn } from "./api.js";
 
 export function createRouter({ container, routes, loginPath, homePath }) {
   let cleanup = null;
-  let current = null;
+  let reloadView = null;
 
   function parse(hash) {
     const path = hash.replace(/^#/, "") || homePath;
@@ -46,19 +46,22 @@ export function createRouter({ container, routes, loginPath, homePath }) {
 
     if (cleanup) {
       cleanup();
-      cleanup = null;
     }
-    current = found;
+    cleanup = null;
+    reloadView = null;
     container.replaceChildren();
     const result = found.route.view({ container, params: found.params, navigate });
     if (typeof result === "function") {
       cleanup = result;
+    } else if (result) {
+      cleanup = result.cleanup ?? null;
+      reloadView = result.reload ?? null;
     }
   }
 
   function reload() {
-    if (current?.route.reload) {
-      current.route.reload();
+    if (reloadView) {
+      reloadView();
     } else {
       render();
     }
