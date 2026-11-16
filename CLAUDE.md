@@ -671,6 +671,22 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
     (`tickStepMs`: 10 min / 3 h / 1 day) — the default linear ticks gave uneven times
     (07:28, 07:53, 08:10). Colours read from the CSS variables at creation.
   - Removed the comments left in `api.js` (no-comments rule applies to JS too).
-- Next: frontend slice 5 — add / edit / delete monitor (replace the `#/monitors/new`
-  placeholder; edit + delete from the detail page). Step by step, the user steers by
-  screenshot.
+- **Add / edit / delete — done** (2026-11-16, pushed; user confirmed it works).
+  `js/views/monitor-form.js`: `monitorCreateView` (`#/monitors/new`) and `monitorEditView`
+  (`#/monitors/:id/edit`) share `renderForm` — URL (`type=url`), "Check every" number +
+  seconds/minutes/hours select (10s–24h checked client-side too, `splitInterval` shows 300
+  as "5 minutes"), Timeout 1–60, "Attempts per check" (hint "1 means no retries" —
+  `retry_count` is total attempts). Defaults 60s / 10s / 1. Create → the new monitor's
+  page; edit PATCHes **only changed fields** (none → just navigate back).
+  - Detail page: Edit + Delete in `.detail-topbar` next to the back link — **outside** the
+    header that redraws on every poll, so a refresh can't destroy an open dialog. Delete is
+    a `<dialog>` (`showModal`) naming the URL and warning the history goes too; focus
+    starts on Cancel; success → `/monitors`.
+  - `main.js`: the `placeholder` helper is gone; routes `/monitors/new`, `/monitors/:id`,
+    `/monitors/:id/edit`.
+- **The v1 dashboard frontend is complete** (login/register, list, detail + chart,
+  add/edit/delete). Open polish: the list's 130px pill column; red down markers on the
+  chart not yet seen in a screenshot.
+- Next: decide — v1 is feature-complete, so per the milestones the next work is making it
+  **deployable** (AWS: Dockerfile, choosing EC2 vs ECS/Fargate vs Beanstalk, RDS vs
+  Postgres-in-Docker), then milestone 1, incident detection (TDD, the user writes it).

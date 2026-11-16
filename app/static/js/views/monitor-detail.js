@@ -1,4 +1,4 @@
-import { errorMessage, getCheckResults, getMonitor, getMonitorStats } from "../api.js";
+import { deleteMonitor, errorMessage, getCheckResults, getMonitor, getMonitorStats } from "../api.js";
 import { buildSeries } from "../chart-data.js";
 import { el } from "../dom.js";
 import { formatDateTime, formatInterval, formatRelative, formatResponseTime } from "../format.js";
@@ -170,9 +170,68 @@ function notFound(container, message) {
   );
 }
 
-export function monitorDetailView({ container, params }) {
+function deleteDialog(monitorId, onDeleted) {
+  const urlText = el("span", { class: "mono" });
+  const alert = el("div", { class: "alert", role: "alert", hidden: true });
+  const confirmButton = el("button", { class: "button button--danger", type: "button" }, "Delete monitor");
+  const cancelButton = el("button", { class: "button button--ghost", type: "button" }, "Cancel");
+
+  const dialog = el(
+    "dialog",
+    { class: "dialog", "aria-labelledby": "delete-title" },
+    el("h2", { class: "dialog__title", id: "delete-title" }, "Delete this monitor?"),
+    el("p", { class: "dialog__text" }, urlText, " will stop being checked and its whole check history is deleted. This can't be undone."),
+    alert,
+    el("div", { class: "form-actions" }, cancelButton, confirmButton),
+  );
+
+  cancelButton.addEventListener("click", () => dialog.close());
+  confirmButton.addEventListener("click", async () => {
+    alert.hidden = true;
+    confirmButton.disabled = true;
+    try {
+      await deleteMonitor(monitorId);
+      dialog.close();
+      onDeleted();
+    } catch (error) {
+      confirmButton.disabled = false;
+      if (error.status === 401) {
+        dialog.close();
+        return;
+      }
+      alert.textContent = errorMessage(error);
+      alert.hidden = false;
+    }
+  });
+
+  return {
+    element: dialog,
+    open(url) {
+      urlText.textContent = url;
+      alert.hidden = true;
+      confirmButton.disabled = false;
+      dialog.showModal();
+      cancelButton.focus();
+    },
+  };
+}
+
+export function monitorDetailView({ container, params, navigate }) {
   const monitorId = params.id;
   const range = { current: RANGES[0] };
+  let currentUrl = "";
+
+  const confirmDelete = deleteDialog(monitorId, () => navigate("/monitors"));
+  const actions = el(
+    "div",
+    { class: "detail-actions" },
+    el("a", { class: "button button--ghost", href: `#/monitors/${monitorId}/edit` }, "Edit"),
+    el(
+      "button",
+      { class: "button button--ghost button--ghost-danger", type: "button", onclick: () => confirmDelete.open(currentUrl) },
+      "Delete",
+    ),
+  );
 
   const alert = el("div", { class: "alert", role: "alert", hidden: true });
   const header = el("div", { class: "detail-header" }, el("p", { class: "muted" }, "Loading monitor…"));
@@ -196,11 +255,12 @@ export function monitorDetailView({ container, params }) {
   );
 
   container.append(
-    el("a", { class: "back-link", href: "#/monitors" }, "← All monitors"),
+    el("div", { class: "detail-topbar" }, el("a", { class: "back-link", href: "#/monitors" }, "← All monitors"), actions),
     header,
     alert,
     tiles,
     chartCard,
+    confirmDelete.element,
   );
 
   const chart = window.Chart ? createChart(canvas, range) : null;
@@ -246,6 +306,7 @@ export function monitorDetailView({ container, params }) {
   }
 
   function renderHeader(monitor) {
+    currentUrl = monitor.url;
     const latest = monitor.latest_check;
     header.replaceChildren(
       el(

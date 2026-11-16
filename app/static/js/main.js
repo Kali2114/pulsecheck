@@ -1,29 +1,21 @@
 import { getMe, isLoggedIn, logout } from "./api.js";
-import { el } from "./dom.js";
 import { createRouter } from "./router.js";
 import { loginView, registerView } from "./views/auth.js";
 import { monitorDetailView } from "./views/monitor-detail.js";
+import { monitorCreateView, monitorEditView } from "./views/monitor-form.js";
 import { monitorListView } from "./views/monitors.js";
 
 const container = document.getElementById("app");
 const nav = document.getElementById("nav");
 const navUser = document.getElementById("nav-user");
 
-function placeholder(title, text) {
-  return ({ container }) => {
-    container.append(
-      el("h1", { class: "page-title" }, title),
-      el("div", { class: "card" }, el("p", { class: "muted" }, text)),
-    );
-  };
-}
-
 const routes = [
   { path: "/login", public: true, guestOnly: true, view: loginView },
   { path: "/register", public: true, guestOnly: true, view: registerView },
   { path: "/monitors", view: monitorListView },
-  { path: "/monitors/new", view: placeholder("Add monitor", "The add form comes in a later step.") },
+  { path: "/monitors/new", view: monitorCreateView },
   { path: "/monitors/:id", view: monitorDetailView },
+  { path: "/monitors/:id/edit", view: monitorEditView },
 ];
 
 const router = createRouter({ container, routes, loginPath: "/login", homePath: "/monitors" });
