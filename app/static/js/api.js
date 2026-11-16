@@ -31,17 +31,13 @@ export function getToken() {
 function setToken(token) {
   try {
     localStorage.setItem(TOKEN_KEY, token);
-  } catch {
-    // storage unavailable: the session lasts until the page reloads
-  }
+  } catch {}
 }
 
 export function clearToken() {
   try {
     localStorage.removeItem(TOKEN_KEY);
-  } catch {
-    // nothing stored
-  }
+  } catch {}
 }
 
 export function isLoggedIn() {

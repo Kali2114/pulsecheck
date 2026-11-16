@@ -2,6 +2,7 @@ import { getMe, isLoggedIn, logout } from "./api.js";
 import { el } from "./dom.js";
 import { createRouter } from "./router.js";
 import { loginView, registerView } from "./views/auth.js";
+import { monitorDetailView } from "./views/monitor-detail.js";
 import { monitorListView } from "./views/monitors.js";
 
 const container = document.getElementById("app");
@@ -22,11 +23,7 @@ const routes = [
   { path: "/register", public: true, guestOnly: true, view: registerView },
   { path: "/monitors", view: monitorListView },
   { path: "/monitors/new", view: placeholder("Add monitor", "The add form comes in a later step.") },
-  {
-    path: "/monitors/:id",
-    view: ({ container, params }) =>
-      placeholder(`Monitor ${params.id}`, "Monitor detail comes later.")({ container }),
-  },
+  { path: "/monitors/:id", view: monitorDetailView },
 ];
 
 const router = createRouter({ container, routes, loginPath: "/login", homePath: "/monitors" });
