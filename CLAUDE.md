@@ -629,6 +629,21 @@ implementation has a test asserting `isinstance(repo, Protocol)` — note that o
   `detail` as is, Pydantic 422 lists as `"field: msg"`. The nav refreshes via `main.js`'s
   `hashchange` listener when login state flips.
   - Tip: hard refresh (Ctrl+Shift+R) after JS changes — Firefox caches the modules.
-- Next: frontend slice 3 — monitor list (status pill from `latest_check`, URL, interval,
-  last check; 15s polling paused while hidden, never overlapping), then detail + chart,
-  add/edit/delete. Step by step, the user steers by screenshot.
+- **Monitor list — done** (2026-11-16, pushed; checked by the user with monitors added via
+  `/docs` and the scheduler running — rows filled in by polling, no reload).
+  `js/views/monitors.js` `monitorListView`: header + "+ Add monitor" (→ `#/monitors/new`,
+  a placeholder route listed **before** `/monitors/:id`), summary "N up · N down · N
+  waiting", rows (whole row links to `#/monitors/:id`) with `statusPill(latest_check)`
+  (exported for reuse), URL (mono, ellipsis), "Every 10s", last check "12s ago · 143 ms" /
+  "no response" (exact time on hover); empty-state card; stacks on ≤640px.
+  - `js/format.js`: `formatInterval`, `formatRelative`, `formatDateTime`,
+    `formatResponseTime`.
+  - `js/poller.js` `createPoller(load, intervalMs)`: `setTimeout` chained after each load
+    (never overlaps), pauses on `document.hidden`, refreshes on return; `start` / `refresh`
+    / `stop`. List interval `LIST_REFRESH_MS = 15_000`. A failed refresh shows an alert and
+    keeps the last data; a 401 is left to `api.js`'s redirect.
+  - Router: a view returns either a cleanup function or `{cleanup, reload}`;
+    `router.reload()` calls the view's `reload` (WebSocket hook later), else re-renders.
+- Next: frontend slice 4 — monitor detail (stat tiles from `/stats`, Chart.js response-time
+  chart with decimation, `null` = gap, downtime red, 1h | 24h | 7d control; polling 15s /
+  60s for 7d), then add/edit/delete. Step by step, the user steers by screenshot.
