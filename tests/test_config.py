@@ -47,6 +47,23 @@ def test_test_database_url_uses_test_database():
     assert url.database == "pulsecheck_test"
 
 
+def test_test_database_is_optional():
+    settings = create_settings()
+    payload = settings.model_dump(exclude={"postgres_test_db"})
+
+    settings_without_test_db = Settings(_env_file=None, **payload)
+
+    assert settings_without_test_db.postgres_test_db is None
+    assert settings_without_test_db.database_url.database == "pulsecheck"
+
+
+def test_test_database_url_without_test_database_raises():
+    settings = create_settings(postgres_test_db=None)
+
+    with pytest.raises(ValueError, match="POSTGRES_TEST_DB is not configured"):
+        settings.test_database_url
+
+
 def test_host_can_be_overridden():
     url = create_settings(postgres_host="db").database_url
 

@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     postgres_user: str
     postgres_password: str
     postgres_db: str
-    postgres_test_db: str
+    postgres_test_db: str | None = None
     postgres_port: int
     postgres_host: str = "localhost"
     scheduler_enabled: bool = True
@@ -51,6 +51,9 @@ class Settings(BaseSettings):
 
     @property
     def test_database_url(self) -> URL:
+        if self.postgres_test_db is None:
+            raise ValueError("POSTGRES_TEST_DB is not configured")
+
         return self._build_database_url(self.postgres_test_db)
 
 

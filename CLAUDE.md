@@ -142,8 +142,11 @@ different name the prod `up` would replace the dev Postgres container). Services
   Commands: `docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build`;
   stop with `docker compose -p pulsecheck-prod down` (never `-v`: deletes the DB volume).
 - Locally MeetShift's nginx (crash-looping) also wants 80/443.
-- Open: `Settings.postgres_test_db` is required, so production needs a test-DB name it
-  never uses — make it optional or move it to the test setup (user's backend fix).
+- `Settings.postgres_test_db` is now `str | None = None` (user's fix, 2026-11-18):
+  production needs no test-DB name; `test_database_url` raises `ValueError("POSTGRES_TEST_DB
+  is not configured")` when it's missing, so the test setup still fails loudly. Tests:
+  settings without the key → `None` + main URL works; the property raises (both
+  mutation-checked). The line can be dropped from `.env.prod`.
 - Next: step 3 — Terraform (EC2 t3.micro, Elastic IP, security group 80/443 + SSH from
   the user's IP, separate EBS volume for Postgres data, IAM role; DNS record for the
   domain; swap on the 1 GB instance).
