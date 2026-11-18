@@ -117,7 +117,36 @@ recursive). A new file the image needs → add both a `COPY` and a `!` line.
   default — behind Caddy in another container it needs `--forwarded-allow-ips`, or
   FastAPI sees `http` and builds `http://` redirects. Also open: pinning dependency
   versions (`requirements.txt` is all `>=`); `--no-cache-dir` missing on the pip upgrade.
-- Next: step 2 — production compose (app + Postgres + Caddy; when migrations run).
+**Step 2 — production compose: done** (2026-11-18; `docker-compose.prod.yml` written by the
+user, `Caddyfile` + Caddy service + env files by Claude on request). `name:
+pulsecheck-prod` (the dev compose is project `pulsecheck` with its own `db` — without a
+different name the prod `up` would replace the dev Postgres container). Services:
+- `db`: `postgres:17`, volume `prod-db-data`, healthcheck, **no ports**.
+- `migrate`: image `pulsecheck:prod`, `alembic upgrade head`, waits for `db`
+  `service_healthy`, `restart: "no"`; re-runs harmlessly on every `up`.
+- `app`: `build: .` → `image: pulsecheck:prod` (built once, `migrate` reuses it), waits
+  for `migrate` `service_completed_successfully`; `env_file: .env.prod` +
+  `environment:` overrides `POSTGRES_HOST: db`, `POSTGRES_PORT: 5432` (internal port), and
+  `FORWARDED_ALLOW_IPS: "*"` (safe only because `app` publishes no port). No ports.
+- `caddy`: `caddy:2.11.9`, the only published ports (80, 443, 443/udp for HTTP/3),
+  `Caddyfile` mounted `:ro`, volumes `caddy-data` (**certificates** — losing it hits Let's
+  Encrypt rate limits) and `caddy-config`. `Caddyfile`: `{$SITE_ADDRESS}` →
+  `encode zstd gzip`, `reverse_proxy app:8000`.
+- Env: `.env.prod` (gitignored via `.env.*` + `!.env.sample`; mode 600; its own
+  `POSTGRES_PASSWORD` / `SECRET_KEY`). Run with `--env-file .env.prod` — `${…}` in the
+  compose file is filled from `.env` unless told otherwise, separately from `env_file:`.
+  `SITE_ADDRESS=localhost` locally, the domain on the server.
+- Verified locally: migrations ran on an empty DB (exit 0), `http://localhost` → 308 to
+  https, `https://localhost` 200 over HTTP/2 with gzip, API 401 through Caddy, FastAPI's
+  `/monitors/` redirect keeps `https://` (forwarded headers work), port 8000 closed.
+  Commands: `docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build`;
+  stop with `docker compose -p pulsecheck-prod down` (never `-v`: deletes the DB volume).
+- Locally MeetShift's nginx (crash-looping) also wants 80/443.
+- Open: `Settings.postgres_test_db` is required, so production needs a test-DB name it
+  never uses — make it optional or move it to the test setup (user's backend fix).
+- Next: step 3 — Terraform (EC2 t3.micro, Elastic IP, security group 80/443 + SSH from
+  the user's IP, separate EBS volume for Postgres data, IAM role; DNS record for the
+  domain; swap on the 1 GB instance).
 
 Earlier notes: AWS. Not decided yet: EC2 vs. ECS/Fargate vs. Elastic Beanstalk — check free-tier eligibility
 (750 hrs/month of a t2/t3.micro under the 12-month free tier, if not already used) before assuming
