@@ -88,7 +88,38 @@ Persistence design:
 
 ## Deployment target
 
-AWS. Not decided yet: EC2 vs. ECS/Fargate vs. Elastic Beanstalk — check free-tier eligibility
+**Decided 2026-11-16:** Terraform. One EC2 instance (free-tier t3.micro — the user's
+account still has the 12-month free tier) running Docker Compose: app container +
+Postgres container with its data on a separate EBS volume, Caddy in front for automatic
+HTTPS. The user **has a domain** — a subdomain points at the instance's Elastic IP.
+ECS/Fargate rejected for now (an ALB alone is ~$16/month; the in-process scheduler needs
+exactly one process anyway); RDS deferred (only `DATABASE_URL` changes). Order:
+(1) Dockerfile + production compose, tested locally; (2) Terraform (security group: 80,
+443, SSH from the user's IP only; EC2, Elastic IP, EBS volume, IAM role); (3) GitHub
+Actions deploy after tests pass. **The user writes the Dockerfile and Terraform; Claude
+gives hints and reviews** — same as backend work, not the frontend split.
+
+**Step 1 — Dockerfile: done** (2026-11-18, written by the user). `python:3.12-slim`;
+`requirements.txt` copied to `/tmp` and installed into a venv at `/py` in one `RUN`
+(file removed in the same layer); `app/`, `alembic/`, `alembic.ini` copied to `/app`
+(owned by root, so the app user can read but not change its code); system user
+`pulsecheck` (`useradd -r -s /usr/sbin/nologin`), `USER pulsecheck`;
+`PYTHONUNBUFFERED=1`, `PATH="/py/bin:$PATH"`; `EXPOSE 8000`; exec-form `CMD` uvicorn
+`--host 0.0.0.0 --port 8000 --proxy-headers`, one process. `.dockerignore` is an
+**allowlist** (`*`, then `!` for exactly what the `COPY`s use, then `**/__pycache__/`,
+`**/*.pyc` last — the last matching rule wins; plain patterns are root-only, not
+recursive). A new file the image needs → add both a `COPY` and a `!` line.
+- Tested locally against the dev Postgres: `docker run --rm --env-file .env
+  -e POSTGRES_HOST=host.docker.internal --add-host=host.docker.internal:host-gateway
+  -p 8000:8000 pulsecheck` — dashboard works, the container's scheduler wrote 6
+  checks/min for a 10s monitor. Stop the local uvicorn first (port + double scheduler).
+- Open for the Caddy step: uvicorn trusts forwarded headers only from `127.0.0.1` by
+  default — behind Caddy in another container it needs `--forwarded-allow-ips`, or
+  FastAPI sees `http` and builds `http://` redirects. Also open: pinning dependency
+  versions (`requirements.txt` is all `>=`); `--no-cache-dir` missing on the pip upgrade.
+- Next: step 2 — production compose (app + Postgres + Caddy; when migrations run).
+
+Earlier notes: AWS. Not decided yet: EC2 vs. ECS/Fargate vs. Elastic Beanstalk — check free-tier eligibility
 (750 hrs/month of a t2/t3.micro under the 12-month free tier, if not already used) before assuming
 cost. Fly.io has no free tier as of late 2024; Render's free tier blocks outbound SMTP ports and
 has no persistent disk on the free plan — neither is a good fit for this app's notification/DB

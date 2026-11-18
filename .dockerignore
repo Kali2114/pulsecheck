@@ -1,0 +1,13 @@
+# Ignore everything by default
+*
+
+# Required application files
+!requirements.txt
+!app/
+!alembic/
+!alembic.ini
+
+# Exclude Python cache recursively
+**/__pycache__/
+**/*.pyc
+**/*.pyo
